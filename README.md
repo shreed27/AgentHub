@@ -150,3 +150,187 @@ The user never touches low-level complexity.
         │   SOLANA / DEXs   │
         │ (On-chain state) │
         └──────────────────┘
+
+
+CORE IDEA (1-liner)
+
+A single platform where users deploy autonomous agents that discover markets, route liquidity, analyze sentiment, and execute trades across prediction markets & DEXs — using OpenClaw-powered agents + user-authorized wallets. 
+
+1️⃣ User & Wallet Layer (Foundation)
+
+User Capabilities:
+
+Connect wallet (Solana / EVM – start with Solana)
+Grant limited permissions to agents (trade-only, capped amounts)
+View active agents & revoke access anytime
+
+Important:
+
+❌ No custody
+❌ No private key storage
+✅ Agent operates via signed user approval
+
+
+2️⃣ Agent Creation & Management (OpenClaw Core)
+
+Inspired by openclaw-sidex-kit + CloddsBot
+
+Agent Builder
+Create autonomous agents via UI
+
+Choose:
+
+Strategy type (manual / templated)
+Capital allocation
+Risk limits
+Markets to operate on
+
+Agent Types:
+
+Trading Agent
+Routing Agent
+Research/OSINT Agent
+Execution-only Agent
+
+Agent Runtime:
+
+Agents run continuously
+Can be paused, killed, cloned
+
+Each agent has:
+
+State
+Memory
+Logs
+Decision history
+
+3️⃣ Market Discovery & Intelligence (OSINT Layer)
+
+Powered by osint-market
+
+What this does:
+
+Scrapes & aggregates:
+
+News
+X / social sentiment
+Market signals
+On-chain events
+
+Features:
+
+Market sentiment score
+Event-based signals (elections, launches, governance votes)
+Feed usable by agents (not just humans)
+
+Key Point:
+Agents don’t “guess” — they react to real-world signals.
+
+4️⃣ Prediction Market Trading (CloddsBot + Your Feature)
+
+This is our killer differentiator.
+
+Supported Markets:
+
+Polymarket-style prediction markets
+Binary / multi-outcome markets
+
+Agent Abilities:
+
+Auto-place YES / NO positions
+Scale in/out
+Hedge across correlated markets
+Close positions on signal decay
+
+User Controls:
+
+Max loss per market
+Max exposure
+Time-based exits
+
+5️⃣ DEX Trading & Liquidity (agent-dex)
+
+DEX Interaction:
+
+Spot swaps
+LP routing
+
+Arbitrage logic (basic first):
+
+Agent Strategies
+Momentum-based
+Mean reversion
+
+Event-based (triggered by OSINT):
+
+Execution
+Agents call DEX routes directly
+Uses router abstraction (no hardcoded DEX logic)
+
+6️⃣ Smart Routing Engine (Superrouter)
+
+This is the invisible magic. What it does
+
+Finds best execution path across:
+
+DEXs
+Prediction markets
+Liquidity pools
+
+Features:
+
+Slippage minimization
+Gas optimization
+Multi-hop routing
+Cross-market execution
+
+
+
+7️⃣ Agent-to-Agent Network (clawdnet)
+
+This makes your app 10x more futuristic.
+Capabilities: 
+
+Agents communicate with other agents
+Share signals (not keys, not funds)
+
+Subscribe to:
+
+Sentiment agents
+Whale-watch agents
+Volatility agents
+
+Example: Your trading agent subscribes to 3 research agents and executes faster than humans.
+
+8️⃣ Strategy Marketplace (Optional but Powerful)
+
+Users can: 
+
+Publish agent strategies
+Fork existing agents
+Follow top-performing agents
+Monetization-ready
+Performance fee
+Subscription-based agents
+
+9️⃣ Analytics & Transparency Dashboard
+
+For Users: 
+PnL per agent
+Risk exposure
+Win/Loss ratio
+
+Market-wise breakdown:
+For Judges
+Full audit trail
+Deterministic decisions
+Replayable agent actions
+
+🔟 Safety, Constraints & Guardrails
+
+Critical for hackathon credibility.
+Trade caps
+Kill-switch
+Simulation mode
+Dry-run testing
+Explicit user consent per agent
