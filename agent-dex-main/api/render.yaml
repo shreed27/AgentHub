@@ -1,0 +1,13 @@
+# Render.com deployment config (alternative to Railway)
+services:
+  - type: web
+    name: agentdex-api
+    env: node
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000

@@ -1,0 +1,21 @@
+{
+  "name": "agent-dex",
+  "version": "1.0.0",
+  "private": true,
+  "description": "AgentDEX — The first DEX built for AI agents on Solana",
+  "scripts": {
+    "install:all": "cd api && npm install && cd ../web && npm install",
+    "dev": "concurrently \"npm run dev:api\" \"npm run dev:web\"",
+    "dev:api": "cd api && npm run dev",
+    "dev:web": "cd web && npm run dev",
+    "build": "npm run build:api && npm run build:web",
+    "build:api": "cd api && npm run build",
+    "build:web": "cd web && npm run build",
+    "start": "concurrently \"npm run start:api\" \"npm run start:web\"",
+    "start:api": "cd api && npm start",
+    "start:web": "cd web && npm start"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

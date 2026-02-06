@@ -1,0 +1,35 @@
+{
+  "name": "super-trading-platform",
+  "version": "1.0.0",
+  "description": "DAIN Super Trading Platform - Unified autonomous trading with AI agents",
+  "private": true,
+  "workspaces": [
+    "trading-orchestrator",
+    "trading-frontend",
+    "CloddsBot-main",
+    "agent-dex-main/api",
+    "openclaw-sidex-kit-main",
+    "clawdnet-main",
+    "AgentHub-Repo/orchestrator",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev:gateway\" \"npm run dev:orchestrator\" \"npm run dev:frontend\"",
+    "dev:gateway": "npm run dev --workspace=apps/gateway",
+    "dev:orchestrator": "npm run dev --workspace=trading-orchestrator",
+    "dev:frontend": "npm run dev --workspace=trading-frontend",
+    "dev:cloddsbot": "npm run dev --workspace=CloddsBot-main",
+    "dev:agent-dex": "npm run dev --workspace=agent-dex-main/api",
+    "build": "npm run build --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "start:all": "concurrently -n gateway,orchestrator,frontend,cloddsbot,agent-dex -c blue,green,yellow,magenta,cyan \"npm run dev:gateway\" \"npm run dev:orchestrator\" \"npm run dev:frontend\" \"npm run dev:cloddsbot\" \"npm run dev:agent-dex\""
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
