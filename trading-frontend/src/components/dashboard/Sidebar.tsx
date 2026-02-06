@@ -1,6 +1,6 @@
 "use client";
 
-import { LayoutDashboard, Users, Activity, Settings, Terminal, Wallet, LogOut, Globe, Moon, Sun } from "lucide-react";
+import { LayoutDashboard, Users, Activity, Settings, Terminal, Wallet, LogOut, Globe, Moon, Sun, Target } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
@@ -12,8 +12,10 @@ const menuItems = [
     { icon: Globe, label: "Market Intel", href: "/market-intelligence" },
     { icon: Users, label: "Agents", href: "/agents" },
     { icon: Activity, label: "Live Execution", href: "/execution" },
+    { icon: Target, label: "Bounties", href: "/bounties" },
     { icon: Terminal, label: "Logs", href: "/logs" },
     { icon: Wallet, label: "Portfolio", href: "/portfolio" },
+    { icon: Settings, label: "Settings", href: "/settings" },
 ];
 
 export function Sidebar() {
@@ -70,11 +72,6 @@ export function Sidebar() {
 
             {/* Bottom Actions */}
             <div className="p-4 space-y-1">
-
-                <button className="flex items-center gap-3 px-3 py-2.5 w-full rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors">
-                    <Settings className="w-4 h-4" />
-                    Settings
-                </button>
                 <button className="flex items-center gap-3 px-3 py-2.5 w-full rounded-lg text-sm font-medium text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors">
                     <LogOut className="w-4 h-4" />
                     Disconnect

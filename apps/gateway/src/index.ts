@@ -6,6 +6,9 @@ import { Server as SocketIOServer } from 'socket.io';
 import { config } from 'dotenv';
 import pino from 'pino';
 
+// Database
+import { initializeDatabase, closeDatabase } from './db/index.js';
+
 // Routes
 import { agentsRouter } from './routes/agents.js';
 import { executionRouter } from './routes/execution.js';
@@ -14,6 +17,7 @@ import { portfolioRouter } from './routes/portfolio.js';
 import { marketRouter } from './routes/market.js';
 import { healthRouter } from './routes/health.js';
 import bountiesRouter from './routes/bounties.js';
+import { integrationsRouter } from './routes/integrations.js';
 
 // WebSocket
 import { setupWebSocket } from './websocket/index.js';
@@ -22,6 +26,9 @@ import { setupWebSocket } from './websocket/index.js';
 import { ServiceRegistry } from './services/registry.js';
 
 config();
+
+// Initialize database
+const db = initializeDatabase();
 
 const logger = pino({
   transport: {
@@ -62,9 +69,10 @@ const serviceRegistry = new ServiceRegistry({
   clawdnetUrl: process.env.CLAWDNET_URL || 'http://localhost:3004',
 });
 
-// Make service registry available to routes
+// Make service registry and database available to routes
 app.locals.serviceRegistry = serviceRegistry;
 app.locals.logger = logger;
+app.locals.db = db;
 
 // API Routes
 app.use('/api/v1/health', healthRouter);
@@ -74,6 +82,7 @@ app.use('/api/v1/signals', signalsRouter);
 app.use('/api/v1/portfolio', portfolioRouter);
 app.use('/api/v1/market', marketRouter);
 app.use('/api/v1/bounties', bountiesRouter);
+app.use('/api/v1/integrations', integrationsRouter);
 
 // Socket.IO setup
 const io = new SocketIOServer(httpServer, {
@@ -125,4 +134,23 @@ httpServer.listen(PORT, () => {
   `);
 });
 
-export { app, httpServer, io };
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  logger.info('SIGTERM received, shutting down gracefully...');
+  httpServer.close(() => {
+    closeDatabase();
+    logger.info('Server closed');
+    process.exit(0);
+  });
+});
+
+process.on('SIGINT', () => {
+  logger.info('SIGINT received, shutting down gracefully...');
+  httpServer.close(() => {
+    closeDatabase();
+    logger.info('Server closed');
+    process.exit(0);
+  });
+});
+
+export { app, httpServer, io, db };

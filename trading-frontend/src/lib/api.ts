@@ -289,6 +289,129 @@ class ApiClient {
     }>>('GET', '/api/v1/market/osint/bounties');
   }
 
+  // Bounties
+  async getBounties(params?: {
+    status?: string;
+    difficulty?: string;
+    tags?: string;
+    page?: number;
+    per_page?: number;
+  }) {
+    const queryParams = params
+      ? '?' + new URLSearchParams(params as Record<string, string>).toString()
+      : '';
+    return this.request<{
+      bounties: Array<{
+        id: string;
+        question: string;
+        description?: string;
+        reward: { amount: number; token: string };
+        poster_wallet: string;
+        status: string;
+        difficulty: string;
+        tags: string[];
+        deadline: string;
+        created_at: string;
+      }>;
+      total: number;
+      page: number;
+      per_page: number;
+    }>('GET', `/api/v1/bounties${queryParams}`);
+  }
+
+  async getBountyById(id: string) {
+    return this.request<{
+      bounty: {
+        id: string;
+        question: string;
+        description?: string;
+        reward: { amount: number; token: string };
+        poster_wallet: string;
+        status: string;
+        difficulty: string;
+        tags: string[];
+        deadline: string;
+        created_at: string;
+      };
+      claim: {
+        id: string;
+        hunter_wallet: string;
+        claimed_at: string;
+        expires_at: string;
+      } | null;
+      submission: {
+        id: string;
+        hunter_wallet: string;
+        solution: string;
+        confidence: number;
+        status: string;
+      } | null;
+    }>('GET', `/api/v1/bounties/${id}`);
+  }
+
+  async createBounty(params: {
+    question: string;
+    description?: string;
+    reward: { amount: number; token: string };
+    difficulty?: string;
+    tags?: string[];
+    deadline?: string;
+    poster_wallet: string;
+    escrow_tx?: string;
+  }) {
+    return this.request<{
+      created: boolean;
+      bounty_id: string;
+      bounty: unknown;
+      escrow_status: string;
+      deposit_instructions?: {
+        recipient: string;
+        amount: number;
+        token: string;
+        fee: string;
+        note: string;
+      };
+    }>('POST', '/api/v1/bounties', params);
+  }
+
+  async claimBounty(bountyId: string, hunterWallet: string) {
+    return this.request<{
+      success: boolean;
+      claim: {
+        id: string;
+        bounty_id: string;
+        hunter_wallet: string;
+        claimed_at: string;
+        expires_at: string;
+      };
+      message: string;
+    }>('POST', `/api/v1/bounties/${bountyId}/claim`, { hunter_wallet: hunterWallet });
+  }
+
+  async submitSolution(bountyId: string, params: {
+    solution: string;
+    confidence?: number;
+    hunter_wallet: string;
+  }) {
+    return this.request<{
+      success: boolean;
+      submission: unknown;
+      message: string;
+    }>('POST', `/api/v1/bounties/${bountyId}/submit`, params);
+  }
+
+  async resolveBounty(bountyId: string, params: {
+    approved: boolean;
+    poster_wallet: string;
+  }) {
+    return this.request<{
+      success: boolean;
+      status: string;
+      payout_tx?: string;
+      message: string;
+    }>('POST', `/api/v1/bounties/${bountyId}/resolve`, params);
+  }
+
   async getMarketStats() {
     return this.request<{
       totalVolume24h: number;
@@ -300,6 +423,117 @@ class ApiClient {
       sentiment: string;
       fearGreedIndex: number;
     }>('GET', '/api/v1/market/stats');
+  }
+
+  // Integrations
+  async getAvailablePlatforms() {
+    return this.request<{
+      messaging: Array<{
+        id: string;
+        name: string;
+        icon: string;
+        category: string;
+        description: string;
+        connected: boolean;
+        status: string;
+      }>;
+      exchange: Array<{
+        id: string;
+        name: string;
+        icon: string;
+        category: string;
+        description: string;
+        connected: boolean;
+        status: string;
+      }>;
+      prediction: Array<{
+        id: string;
+        name: string;
+        icon: string;
+        category: string;
+        description: string;
+        connected: boolean;
+        status: string;
+      }>;
+      notificationEvents: Array<{
+        id: string;
+        name: string;
+        description: string;
+      }>;
+    }>('GET', '/api/v1/integrations');
+  }
+
+  async getConnectedPlatforms() {
+    return this.request<Array<{
+      id: string;
+      userId: string;
+      platform: string;
+      category: string;
+      config?: Record<string, unknown>;
+      status: string;
+      lastConnectedAt?: number;
+      lastError?: string;
+      createdAt: number;
+      updatedAt: number;
+      name: string;
+      icon: string;
+      description: string;
+    }>>('GET', '/api/v1/integrations/connected');
+  }
+
+  async connectPlatform(
+    platform: string,
+    credentials: Record<string, unknown>,
+    config?: Record<string, unknown>
+  ) {
+    return this.request<{
+      id: string;
+      platform: string;
+      category: string;
+      status: string;
+      lastConnectedAt?: number;
+    }>('POST', `/api/v1/integrations/${platform}/connect`, { credentials, config });
+  }
+
+  async disconnectPlatform(platform: string) {
+    return this.request<{ message: string }>('POST', `/api/v1/integrations/${platform}/disconnect`);
+  }
+
+  async testPlatformConnection(platform: string, credentials?: Record<string, unknown>) {
+    return this.request<{
+      platform: string;
+      testResult: 'passed' | 'failed';
+      message: string;
+      latencyMs?: number;
+    }>('POST', `/api/v1/integrations/${platform}/test`, credentials ? { credentials } : undefined);
+  }
+
+  async getPlatformStatus(platform: string) {
+    return this.request<{
+      platform: string;
+      connected: boolean;
+      status: string;
+      health: string;
+      lastConnectedAt?: number;
+      lastError?: string;
+      latencyMs?: number;
+    }>('GET', `/api/v1/integrations/${platform}/status`);
+  }
+
+  async sendTestNotification(platform: string) {
+    return this.request<{
+      sent: boolean;
+      message: string;
+    }>('POST', `/api/v1/integrations/${platform}/test-notification`);
+  }
+
+  // Notification Settings
+  async getNotificationSettings() {
+    return this.request<Record<string, Record<string, { enabled: boolean; config?: Record<string, unknown> }>>>('GET', '/api/v1/integrations/notifications/settings');
+  }
+
+  async updateNotificationSettings(settings: Record<string, Record<string, { enabled: boolean; config?: Record<string, unknown> }>>) {
+    return this.request<{ message: string }>('PUT', '/api/v1/integrations/notifications/settings', { settings });
   }
 }
 
