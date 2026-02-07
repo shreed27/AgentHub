@@ -1,11 +1,9 @@
 /**
  * AI-Powered Entry Analysis for Retracement Trading
  *
- * Uses Gemini AI to generate natural language reasoning about entry signals.
+ * Uses Groq API (Llama 3.3 70B) to generate natural language reasoning about entry signals.
  * This adds human-readable context to the algorithmic analysis.
  */
-
-import { GoogleGenerativeAI } from '@google/generative-ai';
 
 // ============================================
 // TYPES
@@ -52,20 +50,18 @@ export interface AiAnalysisInput {
 }
 
 // ============================================
-// GEMINI CLIENT
+// GROQ API CONFIG
 // ============================================
 
-let genAI: GoogleGenerativeAI | null = null;
+const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
+const GROQ_MODEL = 'llama-3.3-70b-versatile';
 
-function getGenAI(): GoogleGenerativeAI {
-  if (!genAI) {
-    const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY;
-    if (!apiKey) {
-      throw new Error('GEMINI_API_KEY or GOOGLE_GENERATIVE_AI_API_KEY environment variable is required');
-    }
-    genAI = new GoogleGenerativeAI(apiKey);
+function getGroqApiKey(): string {
+  const apiKey = process.env.GROQ_API_KEY;
+  if (!apiKey) {
+    throw new Error('GROQ_API_KEY environment variable is required');
   }
-  return genAI;
+  return apiKey;
 }
 
 // ============================================
@@ -128,15 +124,36 @@ function formatMcap(value: number): string {
  * Generate AI-powered entry analysis for a token
  */
 export async function generateAiEntryAnalysis(input: AiAnalysisInput): Promise<AiEntryAnalysis> {
-  const genAI = getGenAI();
-  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-
+  const apiKey = getGroqApiKey();
   const prompt = buildPrompt(input);
 
   try {
-    const result = await model.generateContent(prompt);
-    const response = result.response;
-    const text = response.text();
+    const response = await fetch(GROQ_API_URL, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: GROQ_MODEL,
+        messages: [
+          {
+            role: 'user',
+            content: prompt,
+          },
+        ],
+        temperature: 0.7,
+        max_tokens: 500,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Groq API error: ${response.status} - ${errorText}`);
+    }
+
+    const data = await response.json();
+    const text = data.choices?.[0]?.message?.content || '';
 
     // Parse JSON response
     const parsed = parseAiResponse(text);

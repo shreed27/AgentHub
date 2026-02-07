@@ -6,6 +6,10 @@ import { Shield, AlertTriangle, Activity, TrendingDown, RefreshCw, Power, Settin
 import { cn } from "@/lib/utils";
 import api from "@/lib/api";
 
+interface RiskTabProps {
+    walletAddress: string | null;
+}
+
 interface RiskMetrics {
     portfolioValue: number;
     dailyVaR: number;
@@ -23,22 +27,27 @@ interface CircuitBreaker {
     status: 'active' | 'triggered' | 'disabled';
 }
 
-export default function RiskTab() {
+export default function RiskTab({ walletAddress }: RiskTabProps) {
     const [metrics, setMetrics] = useState<RiskMetrics | null>(null);
     const [circuitBreaker, setCircuitBreaker] = useState<CircuitBreaker | null>(null);
     const [loading, setLoading] = useState(true);
-    const wallet = "demo-wallet";
 
     useEffect(() => {
-        loadData();
-    }, []);
+        if (walletAddress) {
+            loadData();
+        } else {
+            setLoading(false);
+        }
+    }, [walletAddress]);
 
     const loadData = async () => {
+        if (!walletAddress) return;
+
         setLoading(true);
         try {
             const [metricsRes, cbRes] = await Promise.all([
-                api.getRiskMetrics(wallet),
-                api.getCircuitBreakerConfig(wallet),
+                api.getRiskMetrics(walletAddress),
+                api.getCircuitBreakerConfig(walletAddress),
             ]);
             if (metricsRes.success) setMetrics(metricsRes.data as RiskMetrics);
             if (cbRes.success) setCircuitBreaker(cbRes.data as CircuitBreaker);
@@ -50,9 +59,10 @@ export default function RiskTab() {
     };
 
     const triggerKillSwitch = async () => {
+        if (!walletAddress) return;
         if (!confirm('Are you sure you want to trigger the kill switch? This will close all positions.')) return;
         try {
-            await api.triggerKillSwitch(wallet, 'Manual trigger');
+            await api.triggerKillSwitch(walletAddress, 'Manual trigger');
             loadData();
         } catch (error) {
             console.error('Failed to trigger kill switch:', error);

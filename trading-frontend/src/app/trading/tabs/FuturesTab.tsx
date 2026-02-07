@@ -9,6 +9,10 @@ import {
 import { cn } from "@/lib/utils";
 import api from "@/lib/api";
 
+interface FuturesTabProps {
+    walletAddress: string | null;
+}
+
 interface FuturesPosition {
     id: string;
     symbol: string;
@@ -42,7 +46,7 @@ const MARKETS = [
     { symbol: 'SOL-PERP', name: 'Solana', price: 145.20 },
 ];
 
-export default function FuturesTab() {
+export default function FuturesTab({ walletAddress }: FuturesTabProps) {
     const [positions, setPositions] = useState<FuturesPosition[]>([]);
     const [stats, setStats] = useState<FuturesStats | null>(null);
     const [loading, setLoading] = useState(true);
@@ -55,18 +59,22 @@ export default function FuturesTab() {
         leverage: 10,
     });
 
-    const wallet = "demo-wallet";
-
     useEffect(() => {
-        loadData();
-    }, [selectedExchange]);
+        if (walletAddress) {
+            loadData();
+        } else {
+            setLoading(false);
+        }
+    }, [selectedExchange, walletAddress]);
 
     const loadData = async () => {
+        if (!walletAddress) return;
+
         setLoading(true);
         try {
             const [positionsRes, statsRes] = await Promise.all([
-                api.getFuturesPositions(wallet, selectedExchange.id),
-                api.getFuturesStats(wallet),
+                api.getFuturesPositions(walletAddress, selectedExchange.id),
+                api.getFuturesStats(walletAddress),
             ]);
             if (positionsRes.success) setPositions((positionsRes.data || []) as FuturesPosition[]);
             if (statsRes.success) setStats(statsRes.data as FuturesStats);
@@ -78,11 +86,12 @@ export default function FuturesTab() {
     };
 
     const openPosition = async () => {
+        if (!walletAddress) return;
         const market = MARKETS.find(m => m.symbol === newPosition.symbol);
         if (!market) return;
         try {
             const result = await api.createFuturesPosition({
-                userWallet: wallet,
+                userWallet: walletAddress,
                 exchange: selectedExchange.id,
                 symbol: newPosition.symbol,
                 side: newPosition.side,

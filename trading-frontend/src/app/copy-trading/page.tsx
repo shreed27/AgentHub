@@ -16,9 +16,12 @@ import {
   DollarSign,
   Activity,
   X,
+  Wallet,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import api from "@/lib/api";
+import { useWallet } from "@solana/wallet-adapter-react";
+import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 
 interface CopyConfig {
   id: string;
@@ -308,16 +311,23 @@ function ConfigCard({
 }
 
 export default function CopyTradingPage() {
+  const { publicKey, connected } = useWallet();
+  const { setVisible } = useWalletModal();
   const [configs, setConfigs] = useState<CopyConfig[]>([]);
   const [stats, setStats] = useState<CopyStats | null>(null);
   const [history, setHistory] = useState<CopyHistory[]>([]);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Mock wallet - in real app, get from wallet context
-  const userWallet = "demo_wallet_address";
+  // Get wallet address from connected wallet
+  const userWallet = connected && publicKey ? publicKey.toBase58() : null;
 
   const fetchData = async () => {
+    if (!userWallet) {
+      setIsLoading(false);
+      return;
+    }
+
     setIsLoading(true);
     try {
       const [configsRes, statsRes, historyRes] = await Promise.all([
@@ -346,7 +356,7 @@ export default function CopyTradingPage() {
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [userWallet]);
 
   const handleToggle = async (configId: string, enabled: boolean) => {
     await api.toggleCopyTradingConfig(configId, enabled);
@@ -372,13 +382,23 @@ export default function CopyTradingPage() {
             Automatically mirror trades from successful wallets.
           </p>
         </div>
-        <button
-          onClick={() => setShowCreateModal(true)}
-          className="h-10 px-6 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-medium flex items-center gap-2 shadow-lg transition-all hover:scale-105 active:scale-95"
-        >
-          <Plus className="w-4 h-4" />
-          Follow Trader
-        </button>
+        {connected ? (
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="h-10 px-6 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-medium flex items-center gap-2 shadow-lg transition-all hover:scale-105 active:scale-95"
+          >
+            <Plus className="w-4 h-4" />
+            Follow Trader
+          </button>
+        ) : (
+          <button
+            onClick={() => setVisible(true)}
+            className="h-10 px-6 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-medium flex items-center gap-2 shadow-lg transition-all"
+          >
+            <Wallet className="w-4 h-4" />
+            Connect Wallet
+          </button>
+        )}
       </header>
 
       {/* Stats */}
@@ -456,7 +476,21 @@ export default function CopyTradingPage() {
         </div>
       )}
 
-      {isLoading ? (
+      {!connected ? (
+        <div className="text-center py-20 rounded-xl border border-white/5 bg-white/[0.02]">
+          <Wallet className="w-16 h-16 mx-auto text-muted-foreground mb-4" />
+          <h3 className="text-xl font-semibold text-white mb-2">Connect Your Wallet</h3>
+          <p className="text-muted-foreground mb-6">
+            Connect your wallet to start copy trading and follow successful traders.
+          </p>
+          <button
+            onClick={() => setVisible(true)}
+            className="h-12 px-8 rounded-xl bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white font-medium shadow-lg transition-all hover:scale-105"
+          >
+            Connect Wallet
+          </button>
+        </div>
+      ) : isLoading ? (
         <div className="flex items-center justify-center py-20">
           <div className="animate-spin w-8 h-8 border-2 border-white/20 border-t-white rounded-full" />
         </div>

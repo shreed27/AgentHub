@@ -6,6 +6,10 @@ import { Copy, Plus, RefreshCw, Play, Pause, Settings, TrendingUp, Activity, Tar
 import { cn } from "@/lib/utils";
 import api from "@/lib/api";
 
+interface CopyTradingTabProps {
+    walletAddress: string | null;
+}
+
 interface CopyConfig {
     id: string;
     targetWallet: string;
@@ -24,22 +28,27 @@ interface CopyStats {
     successRate: number;
 }
 
-export default function CopyTradingTab() {
+export default function CopyTradingTab({ walletAddress }: CopyTradingTabProps) {
     const [configs, setConfigs] = useState<CopyConfig[]>([]);
     const [stats, setStats] = useState<CopyStats | null>(null);
     const [loading, setLoading] = useState(true);
-    const wallet = "demo-wallet";
 
     useEffect(() => {
-        loadData();
-    }, []);
+        if (walletAddress) {
+            loadData();
+        } else {
+            setLoading(false);
+        }
+    }, [walletAddress]);
 
     const loadData = async () => {
+        if (!walletAddress) return;
+
         setLoading(true);
         try {
             const [configsRes, statsRes] = await Promise.all([
-                api.getCopyTradingConfigs(wallet),
-                api.getCopyTradingStats(wallet),
+                api.getCopyTradingConfigs(walletAddress),
+                api.getCopyTradingStats(walletAddress),
             ]);
             if (configsRes.success) setConfigs((configsRes.data || []) as CopyConfig[]);
             if (statsRes.success) setStats(statsRes.data as CopyStats);

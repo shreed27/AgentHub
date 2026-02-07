@@ -4,10 +4,12 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
     FlaskConical, Play, Clock, TrendingUp, TrendingDown, DollarSign,
-    BarChart3, RefreshCw, ChevronDown, Calendar, Settings, Activity
+    BarChart3, RefreshCw, ChevronDown, Calendar, Settings, Activity, Wallet
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import api from "@/lib/api";
+import { useWallet } from "@solana/wallet-adapter-react";
+import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 
 interface BacktestStrategy {
     id: string;
@@ -47,6 +49,8 @@ interface BacktestResult {
 }
 
 export default function BacktestPage() {
+    const { publicKey, connected } = useWallet();
+    const { setVisible } = useWalletModal();
     const [strategies, setStrategies] = useState<BacktestStrategy[]>([]);
     const [runs, setRuns] = useState<BacktestRun[]>([]);
     const [selectedRun, setSelectedRun] = useState<BacktestRun | null>(null);
@@ -61,18 +65,18 @@ export default function BacktestPage() {
     const [endDate, setEndDate] = useState('2024-12-31');
     const [initialCapital, setInitialCapital] = useState(10000);
 
-    const wallet = "demo-wallet";
+    const wallet = connected && publicKey ? publicKey.toBase58() : null;
 
     useEffect(() => {
         loadData();
-    }, []);
+    }, [wallet]);
 
     const loadData = async () => {
         setLoading(true);
         try {
             const [strategiesRes, runsRes] = await Promise.all([
                 api.getBacktestStrategies(),
-                api.getBacktestRuns(wallet),
+                wallet ? api.getBacktestRuns(wallet) : Promise.resolve({ success: true, data: [] }),
             ]);
 
             if (strategiesRes.success) {
@@ -92,7 +96,7 @@ export default function BacktestPage() {
     };
 
     const runBacktest = async () => {
-        if (!selectedStrategy) return;
+        if (!selectedStrategy || !wallet) return;
 
         setRunning(true);
         try {

@@ -6,6 +6,10 @@ import { Zap, Plus, Play, Pause, Trash2, RefreshCw, Settings, Clock, CheckCircle
 import { cn } from "@/lib/utils";
 import api from "@/lib/api";
 
+interface AutomationTabProps {
+    walletAddress: string | null;
+}
+
 interface AutomationRule {
     id: string;
     name: string;
@@ -28,22 +32,27 @@ interface AutomationStats {
     byType: Record<string, number>;
 }
 
-export default function AutomationTab() {
+export default function AutomationTab({ walletAddress }: AutomationTabProps) {
     const [rules, setRules] = useState<AutomationRule[]>([]);
     const [stats, setStats] = useState<AutomationStats | null>(null);
     const [loading, setLoading] = useState(true);
-    const wallet = "demo-wallet";
 
     useEffect(() => {
-        loadData();
-    }, []);
+        if (walletAddress) {
+            loadData();
+        } else {
+            setLoading(false);
+        }
+    }, [walletAddress]);
 
     const loadData = async () => {
+        if (!walletAddress) return;
+
         setLoading(true);
         try {
             const [rulesRes, statsRes] = await Promise.all([
-                api.getAutomationRules(wallet),
-                api.getAutomationStats(wallet),
+                api.getAutomationRules(walletAddress),
+                api.getAutomationStats(walletAddress),
             ]);
             if (rulesRes.success && rulesRes.data) setRules(rulesRes.data as AutomationRule[]);
             if (statsRes.success && statsRes.data) setStats(statsRes.data as AutomationStats);

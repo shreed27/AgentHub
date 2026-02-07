@@ -8,6 +8,8 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import dynamic from "next/dynamic";
+import { useWallet } from "@solana/wallet-adapter-react";
+import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 
 // Lazy load the tab content components
 const ExecutionContent = dynamic(() => import("./tabs/ExecutionTab"), { ssr: false });
@@ -27,20 +29,24 @@ const tabs = [
 ];
 
 export default function TradingPage() {
+    const { publicKey, connected } = useWallet();
+    const { setVisible } = useWalletModal();
     const [activeTab, setActiveTab] = useState("execution");
+
+    const walletAddress = connected && publicKey ? publicKey.toBase58() : null;
 
     const renderTabContent = () => {
         switch (activeTab) {
             case "execution":
                 return <ExecutionContent />;
             case "futures":
-                return <FuturesContent />;
+                return <FuturesContent walletAddress={walletAddress} />;
             case "limit-orders":
-                return <LimitOrdersContent />;
+                return <LimitOrdersContent walletAddress={walletAddress} />;
             case "swarm":
-                return <SwarmContent />;
+                return <SwarmContent walletAddress={walletAddress} />;
             case "copy-trading":
-                return <CopyTradingContent />;
+                return <CopyTradingContent walletAddress={walletAddress} />;
             case "migrations":
                 return <MigrationsContent />;
             default:

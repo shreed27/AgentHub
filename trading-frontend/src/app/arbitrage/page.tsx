@@ -4,10 +4,12 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
     ArrowLeftRight, TrendingUp, Clock, DollarSign, Zap, RefreshCw,
-    Play, Pause, Settings, CheckCircle, AlertTriangle, Activity
+    Play, Pause, Settings, CheckCircle, AlertTriangle, Activity, Wallet
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import api from "@/lib/api";
+import { useWallet } from "@solana/wallet-adapter-react";
+import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 
 interface ArbitrageOpportunity {
     id: string;
@@ -49,6 +51,8 @@ interface ArbitrageConfig {
 }
 
 export default function ArbitragePage() {
+    const { publicKey, connected } = useWallet();
+    const { setVisible } = useWalletModal();
     const [opportunities, setOpportunities] = useState<ArbitrageOpportunity[]>([]);
     const [executions, setExecutions] = useState<ArbitrageExecution[]>([]);
     const [config, setConfig] = useState<ArbitrageConfig | null>(null);
@@ -57,21 +61,21 @@ export default function ArbitragePage() {
     const [showSettings, setShowSettings] = useState(false);
     const [stats, setStats] = useState<{ totalExecutions: number; totalProfit: number; successRate: number } | null>(null);
 
-    const wallet = "demo-wallet";
+    const wallet = connected && publicKey ? publicKey.toBase58() : null;
 
     useEffect(() => {
         loadData();
         const interval = setInterval(loadData, 5000); // Refresh every 5 seconds
         return () => clearInterval(interval);
-    }, []);
+    }, [wallet]);
 
     const loadData = async () => {
         try {
             const [oppsRes, execsRes, configRes, statsRes] = await Promise.all([
                 api.getArbitrageOpportunitiesV2({ status: 'active' }),
-                api.getArbitrageExecutions(wallet, 20),
-                api.getArbitrageConfig(wallet),
-                api.get('/arbitrage/stats', { wallet }),
+                wallet ? api.getArbitrageExecutions(wallet, 20) : Promise.resolve({ success: true, data: [] }),
+                wallet ? api.getArbitrageConfig(wallet) : Promise.resolve({ success: true, data: null }),
+                wallet ? api.get('/arbitrage/stats', { wallet }) : Promise.resolve({ success: true, data: null }),
             ]);
 
             if (oppsRes.success) setOpportunities(oppsRes.data || []);
@@ -89,6 +93,7 @@ export default function ArbitragePage() {
     };
 
     const executeArbitrage = async (opportunityId: string) => {
+        if (!wallet) return;
         try {
             const result = await api.executeArbitrage(opportunityId, wallet, 100); // $100 default
             if (result.success) {
@@ -100,6 +105,7 @@ export default function ArbitragePage() {
     };
 
     const toggleAutoExecute = async () => {
+        if (!wallet) return;
         try {
             const newValue = !autoExecute;
             setAutoExecute(newValue);

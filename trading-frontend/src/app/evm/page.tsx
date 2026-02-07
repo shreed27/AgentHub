@@ -8,6 +8,8 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import api from "@/lib/api";
+import { useWallet } from "@solana/wallet-adapter-react";
+import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 
 interface EVMChain {
     id: string;
@@ -74,6 +76,8 @@ const CHAINS: EVMChain[] = [
 ];
 
 export default function EVMPage() {
+    const { publicKey, connected } = useWallet();
+    const { setVisible } = useWalletModal();
     const [selectedChain, setSelectedChain] = useState<EVMChain>(CHAINS[0]);
     const [wallets, setWallets] = useState<EVMWallet[]>([]);
     const [balances, setBalances] = useState<EVMBalance[]>([]);
@@ -101,13 +105,19 @@ export default function EVMPage() {
     });
     const [swapQuote, setSwapQuote] = useState<SwapQuote | null>(null);
 
-    const userWallet = "demo-wallet";
+    const userWallet = connected && publicKey ? publicKey.toBase58() : null;
 
     useEffect(() => {
-        loadData();
-    }, [selectedChain]);
+        if (userWallet) {
+            loadData();
+        } else {
+            setLoading(false);
+        }
+    }, [selectedChain, userWallet]);
 
     const loadData = async () => {
+        if (!userWallet) return;
+
         setLoading(true);
         try {
             const [walletsRes, balancesRes, bridgesRes] = await Promise.all([

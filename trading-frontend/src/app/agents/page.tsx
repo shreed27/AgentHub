@@ -5,6 +5,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Users, Store, Zap, Sparkles, Target, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import dynamic from "next/dynamic";
+import { useWallet } from "@solana/wallet-adapter-react";
+import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 
 const AgentsTab = dynamic(() => import("./tabs/AgentsTab"), { ssr: false });
 const MarketplaceTab = dynamic(() => import("./tabs/MarketplaceTab"), { ssr: false });
@@ -21,7 +23,11 @@ const tabs = [
 ];
 
 export default function AgentsPage() {
+    const { publicKey, connected } = useWallet();
+    const { setVisible } = useWalletModal();
     const [activeTab, setActiveTab] = useState("agents");
+
+    const walletAddress = connected && publicKey ? publicKey.toBase58() : null;
 
     const renderTabContent = () => {
         switch (activeTab) {
@@ -30,9 +36,9 @@ export default function AgentsPage() {
             case "marketplace":
                 return <MarketplaceTab />;
             case "automation":
-                return <AutomationTab />;
+                return <AutomationTab walletAddress={walletAddress} />;
             case "skills":
-                return <SkillsTab />;
+                return <SkillsTab walletAddress={walletAddress} />;
             case "bounties":
                 return <BountiesTab />;
             default:

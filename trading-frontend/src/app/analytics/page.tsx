@@ -5,6 +5,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Globe, ArrowLeftRight, FlaskConical, Shield, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import dynamic from "next/dynamic";
+import { useWallet } from "@solana/wallet-adapter-react";
+import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 
 const MarketIntelTab = dynamic(() => import("./tabs/MarketIntelTab"), { ssr: false });
 const ArbitrageTab = dynamic(() => import("./tabs/ArbitrageTab"), { ssr: false });
@@ -19,18 +21,22 @@ const tabs = [
 ];
 
 export default function AnalyticsPage() {
+    const { publicKey, connected } = useWallet();
+    const { setVisible } = useWalletModal();
     const [activeTab, setActiveTab] = useState("market-intel");
+
+    const walletAddress = connected && publicKey ? publicKey.toBase58() : null;
 
     const renderTabContent = () => {
         switch (activeTab) {
             case "market-intel":
                 return <MarketIntelTab />;
             case "arbitrage":
-                return <ArbitrageTab />;
+                return <ArbitrageTab walletAddress={walletAddress} />;
             case "backtest":
-                return <BacktestTab />;
+                return <BacktestTab walletAddress={walletAddress} />;
             case "risk":
-                return <RiskTab />;
+                return <RiskTab walletAddress={walletAddress} />;
             default:
                 return <MarketIntelTab />;
         }

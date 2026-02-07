@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { useState, useEffect, useRef } from "react";
 import { io, Socket } from "socket.io-client";
 import api from "@/lib/api";
+import { SwapWidget } from "@/components/trading/SwapWidget";
 
 const GATEWAY_URL = process.env.NEXT_PUBLIC_GATEWAY_URL || 'http://localhost:4000';
 
@@ -217,25 +218,25 @@ export default function ExecutionPage() {
                     </div>
                 </div>
 
-                {/* Main Chart Area (Visual Only for now) */}
+                {/* Main Trading Area with Swap Widget */}
                 <div className="flex-1 rounded-xl border border-white/5 bg-black/40 backdrop-blur-md flex flex-col relative overflow-hidden">
                     <div className="absolute inset-0 bg-[url('/grid.svg')] opacity-20" />
                     <div className="p-3 border-b border-white/5 mx-4 flex justify-between items-center relative z-10">
-                        <span className="font-semibold text-sm">SOL/USDC Execution Map</span>
+                        <span className="font-semibold text-sm">SOL/USDC Trading</span>
                         <div className="flex gap-2">
-                            <button className="px-2 py-1 text-xs rounded bg-white/10 text-white">1m</button>
-                            <button className="px-2 py-1 text-xs rounded hover:bg-white/5 text-muted-foreground">5m</button>
-                            <button className="px-2 py-1 text-xs rounded hover:bg-white/5 text-muted-foreground">15m</button>
+                            <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-green-500/10 border border-green-500/20">
+                                <span className="relative flex h-1.5 w-1.5">
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-500 opacity-75"></span>
+                                    <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-green-500"></span>
+                                </span>
+                                <span className="text-[10px] font-medium text-green-400">Jupiter V6</span>
+                            </div>
                         </div>
                     </div>
 
-                    {/* Center Text */}
-                    <div className="flex-1 flex items-center justify-center relative z-10">
-                        <div className="text-center opacity-50">
-                            <Activity className="w-12 h-12 mx-auto mb-4 text-blue-400 animate-pulse" />
-                            <p className="font-mono text-xl">Connecting to Canvas Stream...</p>
-                            <p className="text-sm text-muted-foreground mt-2">Visualizing High-Frequency Ticks</p>
-                        </div>
+                    {/* Swap Widget */}
+                    <div className="flex-1 flex items-center justify-center relative z-10 p-6">
+                        <SwapWidget />
                     </div>
                 </div>
 

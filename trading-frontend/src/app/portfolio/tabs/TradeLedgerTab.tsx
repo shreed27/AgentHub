@@ -6,6 +6,10 @@ import { FileText, TrendingUp, TrendingDown, RefreshCw, Filter, Download, ArrowU
 import { cn } from "@/lib/utils";
 import api from "@/lib/api";
 
+interface TradeLedgerTabProps {
+    walletAddress: string | null;
+}
+
 interface TradeEntry {
     id: string;
     walletAddress: string;
@@ -38,29 +42,34 @@ interface TradeStats {
     byAction: Record<string, number>;
 }
 
-export default function TradeLedgerTab() {
+export default function TradeLedgerTab({ walletAddress }: TradeLedgerTabProps) {
     const [entries, setEntries] = useState<TradeEntry[]>([]);
     const [stats, setStats] = useState<TradeStats | null>(null);
     const [loading, setLoading] = useState(true);
     const [filter, setFilter] = useState<'all' | 'buy' | 'sell'>('all');
-    const wallet = "demo-wallet";
 
     useEffect(() => {
-        loadData();
-    }, [filter]);
+        if (walletAddress) {
+            loadData();
+        } else {
+            setLoading(false);
+        }
+    }, [filter, walletAddress]);
 
     const loadData = async () => {
+        if (!walletAddress) return;
+
         setLoading(true);
         try {
             const params: { walletAddress: string; action?: string; limit: number } = {
-                walletAddress: wallet,
+                walletAddress: walletAddress,
                 limit: 50,
             };
             if (filter !== 'all') params.action = filter;
 
             const [entriesRes, statsRes] = await Promise.all([
                 api.getTradeLedger(params),
-                api.getTradeLedgerStats(wallet),
+                api.getTradeLedgerStats(walletAddress),
             ]);
 
             if (entriesRes.success && entriesRes.data) {

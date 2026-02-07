@@ -11,10 +11,13 @@ import {
   AlertCircle,
   CheckCircle,
   Settings,
+  Wallet,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import api from "@/lib/api";
 import { LimitOrders } from "@/components/trading/LimitOrders";
+import { useWallet } from "@solana/wallet-adapter-react";
+import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 
 interface OrderStats {
   total: number;
@@ -26,14 +29,21 @@ interface OrderStats {
 }
 
 export default function LimitOrdersPage() {
+  const { publicKey, connected } = useWallet();
+  const { setVisible } = useWalletModal();
   const [stats, setStats] = useState<OrderStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Mock wallet
-  const walletAddress = "demo_wallet_address";
+  // Get wallet address from connected wallet
+  const walletAddress = connected && publicKey ? publicKey.toBase58() : null;
 
   useEffect(() => {
     async function fetchStats() {
+      if (!walletAddress) {
+        setIsLoading(false);
+        return;
+      }
+
       setIsLoading(true);
       try {
         const response = await api.getLimitOrderStats(walletAddress);
@@ -48,7 +58,7 @@ export default function LimitOrdersPage() {
     }
 
     fetchStats();
-  }, []);
+  }, [walletAddress]);
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
@@ -72,7 +82,7 @@ export default function LimitOrdersPage() {
       </header>
 
       {/* Stats Overview */}
-      {!isLoading && stats && (
+      {connected && !isLoading && stats && (
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -182,8 +192,25 @@ export default function LimitOrdersPage() {
         </div>
       )}
 
+      {/* Wallet Connection Required */}
+      {!connected && (
+        <div className="text-center py-16 rounded-xl border border-white/5 bg-white/[0.02]">
+          <Wallet className="w-16 h-16 mx-auto text-muted-foreground mb-4" />
+          <h3 className="text-xl font-semibold text-white mb-2">Connect Your Wallet</h3>
+          <p className="text-muted-foreground mb-6">
+            Connect your wallet to create and manage limit orders.
+          </p>
+          <button
+            onClick={() => setVisible(true)}
+            className="h-12 px-8 rounded-xl bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500 text-white font-medium shadow-lg transition-all hover:scale-105"
+          >
+            Connect Wallet
+          </button>
+        </div>
+      )}
+
       {/* How It Works */}
-      <div className="p-4 rounded-xl border border-white/5 bg-gradient-to-r from-orange-500/5 to-transparent">
+      {connected && <div className="p-4 rounded-xl border border-white/5 bg-gradient-to-r from-orange-500/5 to-transparent">
         <h3 className="font-semibold text-white mb-3 flex items-center gap-2">
           <AlertCircle className="w-4 h-4 text-orange-400" />
           How Limit Orders Work
@@ -280,7 +307,7 @@ export default function LimitOrdersPage() {
             </div>
           </div>
         </div>
-      </div>
+      </div>}
     </div>
   );
 }

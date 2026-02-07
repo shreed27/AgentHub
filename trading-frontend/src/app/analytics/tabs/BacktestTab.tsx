@@ -6,6 +6,10 @@ import { FlaskConical, Play, RefreshCw, TrendingUp, Target, BarChart3, Calendar 
 import { cn } from "@/lib/utils";
 import api from "@/lib/api";
 
+interface BacktestTabProps {
+    walletAddress: string | null;
+}
+
 interface BacktestRun {
     id: string;
     name: string;
@@ -25,22 +29,21 @@ interface Strategy {
     description: string;
 }
 
-export default function BacktestTab() {
+export default function BacktestTab({ walletAddress }: BacktestTabProps) {
     const [runs, setRuns] = useState<BacktestRun[]>([]);
     const [strategies, setStrategies] = useState<Strategy[]>([]);
     const [loading, setLoading] = useState(true);
     const [showNewBacktest, setShowNewBacktest] = useState(false);
-    const wallet = "demo-wallet";
 
     useEffect(() => {
         loadData();
-    }, []);
+    }, [walletAddress]);
 
     const loadData = async () => {
         setLoading(true);
         try {
             const [runsRes, strategiesRes] = await Promise.all([
-                api.getBacktestRuns(wallet, { limit: 10 }),
+                walletAddress ? api.getBacktestRuns(walletAddress, { limit: 10 }) : Promise.resolve({ success: true, data: [] }),
                 api.getBacktestStrategies(),
             ]);
             if (runsRes.success) setRuns((runsRes.data || []) as BacktestRun[]);

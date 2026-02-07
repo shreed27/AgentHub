@@ -329,12 +329,12 @@ function CreateOrderForm({ onSubmit, onCancel }: CreateOrderFormProps) {
 }
 
 interface LimitOrdersProps {
-  walletAddress?: string;
+  walletAddress: string | null;
   className?: string;
   compact?: boolean;
 }
 
-export function LimitOrders({ walletAddress = "demo_wallet", className, compact = false }: LimitOrdersProps) {
+export function LimitOrders({ walletAddress, className, compact = false }: LimitOrdersProps) {
   const [orders, setOrders] = useState<LimitOrder[]>([]);
   const [stats, setStats] = useState<LimitOrderStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -343,6 +343,11 @@ export function LimitOrders({ walletAddress = "demo_wallet", className, compact 
   const [filter, setFilter] = useState<string>("all");
 
   const fetchData = async (showRefresh = false) => {
+    if (!walletAddress) {
+      setIsLoading(false);
+      return;
+    }
+
     if (showRefresh) setIsRefreshing(true);
     else setIsLoading(true);
 
@@ -368,14 +373,17 @@ export function LimitOrders({ walletAddress = "demo_wallet", className, compact 
   };
 
   useEffect(() => {
-    fetchData();
+    if (walletAddress) {
+      fetchData();
 
-    // Refresh every 30 seconds
-    const interval = setInterval(() => fetchData(true), 30000);
-    return () => clearInterval(interval);
+      // Refresh every 30 seconds
+      const interval = setInterval(() => fetchData(true), 30000);
+      return () => clearInterval(interval);
+    }
   }, [walletAddress]);
 
   const handleCreateOrder = async (orderData: Partial<LimitOrder>) => {
+    if (!walletAddress) return;
     try {
       const response = await api.createLimitOrder({
         walletAddress,

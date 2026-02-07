@@ -8,6 +8,8 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import api from "@/lib/api";
+import { useWallet } from "@solana/wallet-adapter-react";
+import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 
 interface Agent {
     id: string;
@@ -54,6 +56,8 @@ const CAPABILITY_COLORS: Record<string, string> = {
 };
 
 export default function AgentMarketplacePage() {
+    const { publicKey, connected } = useWallet();
+    const { setVisible } = useWalletModal();
     const [agents, setAgents] = useState<Agent[]>([]);
     const [subscriptions, setSubscriptions] = useState<AgentSubscription[]>([]);
     const [stats, setStats] = useState<NetworkStats | null>(null);
@@ -63,13 +67,18 @@ export default function AgentMarketplacePage() {
     const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
     const [showHireModal, setShowHireModal] = useState(false);
 
-    const wallet = "demo-wallet";
+    const wallet = connected && publicKey ? publicKey.toBase58() : null;
 
     useEffect(() => {
-        loadData();
-    }, [searchQuery, selectedCapability]);
+        if (wallet) {
+            loadData();
+        } else {
+            setLoading(false);
+        }
+    }, [wallet, searchQuery, selectedCapability]);
 
     const loadData = async () => {
+        if (!wallet) return;
         setLoading(true);
         try {
             const [agentsRes, subsRes, statsRes] = await Promise.all([
@@ -101,6 +110,10 @@ export default function AgentMarketplacePage() {
     };
 
     const subscribeToAgent = async (agentId: string, tier: string) => {
+        if (!wallet) {
+            setVisible(true);
+            return;
+        }
         try {
             const result = await api.subscribeToAgent(agentId, wallet, tier);
             if (result.success) {
@@ -114,6 +127,10 @@ export default function AgentMarketplacePage() {
     };
 
     const hireAgent = async (agentId: string) => {
+        if (!wallet) {
+            setVisible(true);
+            return;
+        }
         try {
             const result = await api.hireAgent(agentId, wallet, {
                 description: 'One-time task',

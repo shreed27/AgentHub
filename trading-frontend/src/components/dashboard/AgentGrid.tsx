@@ -1,8 +1,10 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { Play, Pause, AlertCircle, RefreshCw, Cpu } from "lucide-react";
+import { Play, Pause, AlertCircle, RefreshCw, Cpu, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import api from "@/lib/api";
 
 interface Agent {
     id: string;
@@ -13,19 +15,62 @@ interface Agent {
     lastAction: string;
 }
 
-const agents: Agent[] = [
-    { id: "1", name: "Alpha-1", type: "Market Maker", status: "active", performance: 12.5, lastAction: "Placed limit order #X92A" },
-    { id: "2", name: "Gamma-Ray", type: "Arbitrage", status: "active", performance: 8.2, lastAction: "Scanning detailed order books" },
-    { id: "3", name: "Delta-V", type: "Momentum", status: "paused", performance: -1.2, lastAction: "Paused by risk control" },
-];
-
 export function AgentGrid() {
+    const [agents, setAgents] = useState<Agent[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        async function fetchAgents() {
+            try {
+                const response = await api.getAgents();
+                if (response.success && response.data) {
+                    setAgents(response.data.map((a: { id: string; name: string; type: string; status: string; performance?: { winRate?: number } }) => ({
+                        id: a.id,
+                        name: a.name,
+                        type: a.type,
+                        status: a.status as "active" | "idle" | "error" | "paused",
+                        performance: a.performance?.winRate || 0,
+                        lastAction: a.status === "active" ? "Monitoring markets" : "Paused",
+                    })));
+                }
+            } catch (error) {
+                console.error('Failed to fetch agents:', error);
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        fetchAgents();
+        const interval = setInterval(fetchAgents, 15000);
+        return () => clearInterval(interval);
+    }, []);
+    if (loading) {
+        return (
+            <div className="space-y-4">
+                <div className="flex items-center justify-center h-32">
+                    <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                </div>
+            </div>
+        );
+    }
+
+    if (agents.length === 0) {
+        return (
+            <div className="space-y-4">
+                <div className="flex flex-col items-center justify-center h-32 text-muted-foreground">
+                    <Cpu className="w-8 h-8 mb-2 opacity-50" />
+                    <p className="text-sm">No agents deployed</p>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className="space-y-4">
             <div className="flex items-center justify-between px-1 mb-2">
                 <h2 className="text-xs font-bold text-muted-foreground uppercase tracking-widest flex items-center gap-2">
                     <Cpu className="w-3.5 h-3.5" />
-                    Active Agents
+                    Active Agents ({agents.length})
                 </h2>
                 <div className="flex items-center gap-2">
                     <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-green-500/10 border border-green-500/20">

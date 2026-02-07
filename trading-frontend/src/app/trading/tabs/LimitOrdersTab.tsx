@@ -7,6 +7,10 @@ import { cn } from "@/lib/utils";
 import api from "@/lib/api";
 import { LimitOrders } from "@/components/trading/LimitOrders";
 
+interface LimitOrdersTabProps {
+    walletAddress: string | null;
+}
+
 interface OrderStats {
     total: number;
     pending: number;
@@ -16,13 +20,17 @@ interface OrderStats {
     successRate: number;
 }
 
-export default function LimitOrdersTab() {
+export default function LimitOrdersTab({ walletAddress }: LimitOrdersTabProps) {
     const [stats, setStats] = useState<OrderStats | null>(null);
     const [isLoading, setIsLoading] = useState(true);
-    const walletAddress = "demo_wallet_address";
 
     useEffect(() => {
         async function fetchStats() {
+            if (!walletAddress) {
+                setIsLoading(false);
+                return;
+            }
+
             setIsLoading(true);
             try {
                 const response = await api.getLimitOrderStats(walletAddress);
@@ -36,12 +44,12 @@ export default function LimitOrdersTab() {
             }
         }
         fetchStats();
-    }, []);
+    }, [walletAddress]);
 
     return (
         <div className="space-y-6">
             {/* Stats */}
-            {!isLoading && stats && (
+            {!isLoading && stats && walletAddress && (
                 <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
                     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="p-4 rounded-xl border border-white/5 bg-white/[0.02]">
                         <div className="flex items-center gap-3">

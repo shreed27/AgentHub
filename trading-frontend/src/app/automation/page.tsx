@@ -19,6 +19,8 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import api from "@/lib/api";
+import { useWallet } from "@solana/wallet-adapter-react";
+import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 
 interface AutomationRule {
   id: string;
@@ -416,16 +418,21 @@ function RuleCard({
 }
 
 export default function AutomationPage() {
+  const { publicKey, connected } = useWallet();
+  const { setVisible } = useWalletModal();
   const [rules, setRules] = useState<AutomationRule[]>([]);
   const [stats, setStats] = useState<AutomationStats | null>(null);
   const [history, setHistory] = useState<AutomationHistory[]>([]);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Mock wallet
-  const userWallet = "demo_wallet_address";
+  const userWallet = connected && publicKey ? publicKey.toBase58() : null;
 
   const fetchData = async () => {
+    if (!userWallet) {
+      setIsLoading(false);
+      return;
+    }
     setIsLoading(true);
     try {
       const [rulesRes, statsRes, historyRes] = await Promise.all([
@@ -453,8 +460,12 @@ export default function AutomationPage() {
   };
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    if (userWallet) {
+      fetchData();
+    } else {
+      setIsLoading(false);
+    }
+  }, [userWallet]);
 
   const handleToggle = async (ruleId: string, enabled: boolean) => {
     await api.toggleAutomationRule(ruleId, enabled);

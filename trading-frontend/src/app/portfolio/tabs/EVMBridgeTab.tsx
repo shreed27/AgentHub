@@ -6,6 +6,10 @@ import { ArrowLeftRight, RefreshCw, Plus, Wallet, ExternalLink, CheckCircle, Clo
 import { cn } from "@/lib/utils";
 import api from "@/lib/api";
 
+interface EVMBridgeTabProps {
+    walletAddress: string | null;
+}
+
 interface EVMWallet {
     id: string;
     evmAddress: string;
@@ -32,23 +36,28 @@ interface Chain {
     nativeCurrency: string;
 }
 
-export default function EVMBridgeTab() {
+export default function EVMBridgeTab({ walletAddress }: EVMBridgeTabProps) {
     const [wallets, setWallets] = useState<EVMWallet[]>([]);
     const [transactions, setTransactions] = useState<BridgeTransaction[]>([]);
     const [chains, setChains] = useState<Chain[]>([]);
     const [loading, setLoading] = useState(true);
-    const wallet = "demo-wallet";
 
     useEffect(() => {
-        loadData();
-    }, []);
+        if (walletAddress) {
+            loadData();
+        } else {
+            setLoading(false);
+        }
+    }, [walletAddress]);
 
     const loadData = async () => {
+        if (!walletAddress) return;
+
         setLoading(true);
         try {
             const [walletsRes, txRes, chainsRes] = await Promise.all([
-                api.getEVMWallets(wallet),
-                api.getBridgeTransactions(wallet, { limit: 20 }),
+                api.getEVMWallets(walletAddress),
+                api.getBridgeTransactions(walletAddress, { limit: 20 }),
                 api.getSupportedChains(),
             ]);
 

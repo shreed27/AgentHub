@@ -6,6 +6,10 @@ import { Network, Plus, Activity, Wallet, RefreshCw, Settings, Play, Pause } fro
 import { cn } from "@/lib/utils";
 import api from "@/lib/api";
 
+interface SwarmTabProps {
+    walletAddress: string | null;
+}
+
 interface Swarm {
     id: string;
     name: string;
@@ -16,19 +20,24 @@ interface Swarm {
     totalTrades: number;
 }
 
-export default function SwarmTab() {
+export default function SwarmTab({ walletAddress }: SwarmTabProps) {
     const [swarms, setSwarms] = useState<Swarm[]>([]);
     const [loading, setLoading] = useState(true);
-    const wallet = "demo-wallet";
 
     useEffect(() => {
-        loadSwarms();
-    }, []);
+        if (walletAddress) {
+            loadSwarms();
+        } else {
+            setLoading(false);
+        }
+    }, [walletAddress]);
 
     const loadSwarms = async () => {
+        if (!walletAddress) return;
+
         setLoading(true);
         try {
-            const response = await api.getSwarms(wallet);
+            const response = await api.getSwarms(walletAddress);
             if (response.success) {
                 setSwarms((response.data || []) as Swarm[]);
             }

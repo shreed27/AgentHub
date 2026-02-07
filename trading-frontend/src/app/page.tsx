@@ -9,6 +9,7 @@ import { SignalFeed } from "@/components/trading/SignalFeed";
 import { WhaleAlerts } from "@/components/trading/WhaleAlerts";
 import { AIReasoning } from "@/components/trading/AIReasoning";
 import { ConnectionStatus } from "@/components/trading/ConnectionStatus";
+import { SurvivalModeIndicator } from "@/components/trading/SurvivalModeIndicator";
 import { Search, Bell, Rocket, Clock, Cpu, Activity, Zap, Crown, Brain, Loader2 } from "lucide-react";
 import api from "@/lib/api";
 
@@ -208,6 +209,9 @@ export default function Dashboard() {
 
         {/* Right Column - AI Reasoning */}
         <div className="lg:col-span-4 flex flex-col gap-6">
+          {/* Survival Mode Indicator */}
+          <SurvivalModeIndicator />
+
           {/* AI Reasoning */}
           <AIReasoning />
 

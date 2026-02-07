@@ -4,10 +4,12 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
     TrendingUp, TrendingDown, Activity, AlertTriangle, DollarSign,
-    Gauge, Target, X, Plus, RefreshCw, ChevronDown
+    Gauge, Target, X, Plus, RefreshCw, ChevronDown, Wallet
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import api from "@/lib/api";
+import { useWallet } from "@solana/wallet-adapter-react";
+import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 
 interface FuturesPosition {
     id: string;
@@ -51,6 +53,8 @@ const MARKETS = [
 ];
 
 export default function FuturesPage() {
+    const { publicKey, connected } = useWallet();
+    const { setVisible } = useWalletModal();
     const [positions, setPositions] = useState<FuturesPosition[]>([]);
     const [stats, setStats] = useState<FuturesStats | null>(null);
     const [loading, setLoading] = useState(true);
@@ -65,13 +69,19 @@ export default function FuturesPage() {
         leverage: 10,
     });
 
-    const wallet = "demo-wallet"; // Would come from wallet connection
+    const wallet = connected && publicKey ? publicKey.toBase58() : null;
 
     useEffect(() => {
-        loadData();
-    }, [selectedExchange]);
+        if (wallet) {
+            loadData();
+        } else {
+            setLoading(false);
+        }
+    }, [selectedExchange, wallet]);
 
     const loadData = async () => {
+        if (!wallet) return;
+
         setLoading(true);
         try {
             const [positionsRes, statsRes] = await Promise.all([
@@ -93,6 +103,7 @@ export default function FuturesPage() {
     };
 
     const openPosition = async () => {
+        if (!wallet) return;
         try {
             const market = MARKETS.find(m => m.symbol === newPosition.symbol);
             if (!market) return;

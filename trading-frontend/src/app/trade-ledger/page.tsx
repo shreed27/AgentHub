@@ -18,6 +18,8 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import api from "@/lib/api";
+import { useWallet } from "@solana/wallet-adapter-react";
+import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 
 interface LedgerEntry {
   id: string;
@@ -288,17 +290,22 @@ function CalibrationChart({ data }: { data: CalibrationData }) {
 }
 
 export default function TradeLedgerPage() {
+  const { publicKey, connected } = useWallet();
+  const { setVisible } = useWalletModal();
   const [entries, setEntries] = useState<LedgerEntry[]>([]);
   const [stats, setStats] = useState<LedgerStats | null>(null);
   const [calibration, setCalibration] = useState<CalibrationData | null>(null);
   const [filter, setFilter] = useState<string>("all");
   const [isLoading, setIsLoading] = useState(true);
 
-  // Mock wallet
-  const walletAddress = "demo_wallet_address";
+  const walletAddress = connected && publicKey ? publicKey.toBase58() : null;
 
   useEffect(() => {
     async function fetchData() {
+      if (!walletAddress) {
+        setIsLoading(false);
+        return;
+      }
       setIsLoading(true);
       try {
         const params: { walletAddress: string; decisionSource?: string } = { walletAddress };
@@ -331,7 +338,7 @@ export default function TradeLedgerPage() {
     }
 
     fetchData();
-  }, [filter]);
+  }, [walletAddress, filter]);
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">

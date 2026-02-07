@@ -4,10 +4,12 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
     Sparkles, Search, Star, Play, Clock, DollarSign, CheckCircle,
-    RefreshCw, Heart, Filter, X, Zap, Code, BarChart3, Database
+    RefreshCw, Heart, Filter, X, Zap, Code, BarChart3, Database, Wallet
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import api from "@/lib/api";
+import { useWallet } from "@solana/wallet-adapter-react";
+import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 
 interface Skill {
     id: string;
@@ -62,6 +64,8 @@ const CATEGORY_COLORS: Record<string, string> = {
 };
 
 export default function SkillsPage() {
+    const { publicKey, connected } = useWallet();
+    const { setVisible } = useWalletModal();
     const [skills, setSkills] = useState<Skill[]>([]);
     const [skillsByCategory, setSkillsByCategory] = useState<Record<string, Skill[]>>({});
     const [executions, setExecutions] = useState<SkillExecution[]>([]);
@@ -75,11 +79,11 @@ export default function SkillsPage() {
     const [executeInput, setExecuteInput] = useState('');
     const [executing, setExecuting] = useState(false);
 
-    const wallet = "demo-wallet";
+    const wallet = connected && publicKey ? publicKey.toBase58() : null;
 
     useEffect(() => {
         loadData();
-    }, []);
+    }, [wallet]);
 
     const loadData = async () => {
         setLoading(true);
@@ -87,9 +91,9 @@ export default function SkillsPage() {
             const [skillsRes, byCategoryRes, execsRes, favsRes, statsRes] = await Promise.all([
                 api.getSkills({ enabled: true }),
                 api.getSkillsByCategory(),
-                api.get('/skills/executions/wallet/' + wallet, { limit: 20 }),
-                api.getFavoriteSkills(wallet),
-                api.get('/skills/stats/' + wallet, {}),
+                wallet ? api.get('/skills/executions/wallet/' + wallet, { limit: 20 }) : Promise.resolve({ success: true, data: [] }),
+                wallet ? api.getFavoriteSkills(wallet) : Promise.resolve({ success: true, data: [] }),
+                wallet ? api.get('/skills/stats/' + wallet, {}) : Promise.resolve({ success: true, data: null }),
             ]);
 
             if (skillsRes.success) setSkills(skillsRes.data || []);
@@ -105,7 +109,7 @@ export default function SkillsPage() {
     };
 
     const executeSkill = async () => {
-        if (!selectedSkill) return;
+        if (!selectedSkill || !wallet) return;
 
         setExecuting(true);
         try {
@@ -131,6 +135,7 @@ export default function SkillsPage() {
     };
 
     const toggleFavorite = async (skillId: string) => {
+        if (!wallet) return;
         try {
             if (favorites.includes(skillId)) {
                 await api.delete(`/skills/favorites/${wallet}/${skillId}`);

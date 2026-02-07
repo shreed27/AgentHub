@@ -8,6 +8,8 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import api from "@/lib/api";
+import { useWallet } from "@solana/wallet-adapter-react";
+import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 
 interface RiskMetrics {
     valueAtRisk: number;
@@ -44,6 +46,8 @@ interface StressTestResult {
 }
 
 export default function RiskPage() {
+    const { publicKey, connected } = useWallet();
+    const { setVisible } = useWalletModal();
     const [metrics, setMetrics] = useState<RiskMetrics | null>(null);
     const [circuitBreaker, setCircuitBreaker] = useState<CircuitBreakerConfig | null>(null);
     const [stressTests, setStressTests] = useState<StressTestResult[]>([]);
@@ -51,15 +55,20 @@ export default function RiskPage() {
     const [killSwitchActive, setKillSwitchActive] = useState(false);
     const [showKillConfirm, setShowKillConfirm] = useState(false);
 
-    const wallet = "demo-wallet";
+    const wallet = connected && publicKey ? publicKey.toBase58() : null;
 
     useEffect(() => {
-        loadData();
-        const interval = setInterval(loadData, 10000); // Refresh every 10 seconds
-        return () => clearInterval(interval);
-    }, []);
+        if (wallet) {
+            loadData();
+            const interval = setInterval(loadData, 10000); // Refresh every 10 seconds
+            return () => clearInterval(interval);
+        } else {
+            setLoading(false);
+        }
+    }, [wallet]);
 
     const loadData = async () => {
+        if (!wallet) return;
         try {
             const dashboardRes = await api.getRiskDashboard(wallet);
             if (dashboardRes.success) {
@@ -76,6 +85,10 @@ export default function RiskPage() {
     };
 
     const triggerKillSwitch = async () => {
+        if (!wallet) {
+            setVisible(true);
+            return;
+        }
         try {
             setKillSwitchActive(true);
             await api.triggerKillSwitch(wallet, 'Manual kill switch activated');
@@ -88,6 +101,10 @@ export default function RiskPage() {
     };
 
     const runStressTest = async (scenario: string) => {
+        if (!wallet) {
+            setVisible(true);
+            return;
+        }
         try {
             await api.runStressTest(wallet, scenario, {});
             loadData();

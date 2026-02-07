@@ -8,6 +8,8 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import api from "@/lib/api";
+import { useWallet } from "@solana/wallet-adapter-react";
+import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 
 interface SwarmConfig {
     id: string;
@@ -41,7 +43,7 @@ interface SwarmExecution {
     symbol: string;
     action: string;
     totalAmount: number;
-    walletsUsed: number;
+    walletsListUsed: number;
     avgPrice: number;
     status: string;
     executedAt: number;
@@ -56,9 +58,11 @@ interface SwarmStats {
 }
 
 export default function SwarmPage() {
+    const { publicKey, connected } = useWallet();
+    const { setVisible } = useWalletModal();
     const [swarms, setSwarms] = useState<SwarmConfig[]>([]);
     const [selectedSwarm, setSelectedSwarm] = useState<SwarmConfig | null>(null);
-    const [wallets, setWallets] = useState<SwarmWallet[]>([]);
+    const [walletsListList, setWalletsList] = useState<SwarmWallet[]>([]);
     const [executions, setExecutions] = useState<SwarmExecution[]>([]);
     const [stats, setStats] = useState<SwarmStats | null>(null);
     const [loading, setLoading] = useState(true);
@@ -72,13 +76,19 @@ export default function SwarmPage() {
         totalBudget: 10000,
     });
 
-    const wallet = "demo-wallet";
+    const wallet = connected && publicKey ? publicKey.toBase58() : null;
 
     useEffect(() => {
-        loadData();
-    }, []);
+        if (wallet) {
+            loadData();
+        } else {
+            setLoading(false);
+        }
+    }, [wallet]);
 
     const loadData = async () => {
+        if (!wallet) return;
+
         setLoading(true);
         try {
             const [swarmsRes, statsRes] = await Promise.all([
@@ -102,14 +112,14 @@ export default function SwarmPage() {
 
     const selectSwarm = async (swarm: SwarmConfig) => {
         setSelectedSwarm(swarm);
-        // Load wallets and executions for this swarm
+        // Load walletsList and executions for this swarm
         try {
-            const [walletsRes, execsRes] = await Promise.all([
-                api.get(`/swarm/${swarm.id}/wallets`, {}),
+            const [walletsListRes, execsRes] = await Promise.all([
+                api.get(`/swarm/${swarm.id}/walletsList`, {}),
                 api.get(`/swarm/${swarm.id}/executions`, {}),
             ]);
 
-            if (walletsRes.success) setWallets(walletsRes.data || []);
+            if (walletsListRes.success) setWalletsList(walletsListRes.data || []);
             if (execsRes.success) setExecutions(execsRes.data || []);
         } catch (error) {
             console.error('Error loading swarm details:', error);
@@ -117,6 +127,7 @@ export default function SwarmPage() {
     };
 
     const createSwarm = async () => {
+        if (!wallet) return;
         try {
             const result = await api.createSwarm({
                 userWallet: wallet,
@@ -164,7 +175,7 @@ export default function SwarmPage() {
                         Swarm Trading
                     </h1>
                     <p className="text-muted-foreground">
-                        Coordinate trades across multiple wallets for better execution
+                        Coordinate trades across multiple walletsList for better execution
                     </p>
                 </div>
                 <div className="flex items-center gap-3">
@@ -265,7 +276,7 @@ export default function SwarmPage() {
                                             </span>
                                         </div>
                                         <div className="text-xs text-muted-foreground">
-                                            {swarm.maxWallets} wallets | ${swarm.totalBudget.toLocaleString()} budget
+                                            {swarm.maxWallets} walletsList | ${swarm.totalBudget.toLocaleString()} budget
                                         </div>
                                         <div className="mt-2 h-1 bg-white/10 rounded-full overflow-hidden">
                                             <div
@@ -309,7 +320,7 @@ export default function SwarmPage() {
                                     </div>
                                     <div className="p-3 rounded-lg bg-white/5">
                                         <div className="text-xs text-muted-foreground">Wallets</div>
-                                        <div className="font-medium">{wallets.length} / {selectedSwarm.maxWallets}</div>
+                                        <div className="font-medium">{walletsList.length} / {selectedSwarm.maxWallets}</div>
                                     </div>
                                     <div className="p-3 rounded-lg bg-white/5">
                                         <div className="text-xs text-muted-foreground">Budget Used</div>
@@ -332,9 +343,9 @@ export default function SwarmPage() {
                                         + Add Wallet
                                     </button>
                                 </div>
-                                {wallets.length === 0 ? (
+                                {walletsList.length === 0 ? (
                                     <div className="p-6 text-center text-muted-foreground">
-                                        No wallets added to this swarm yet
+                                        No walletsList added to this swarm yet
                                     </div>
                                 ) : (
                                     <div className="overflow-x-auto">
@@ -350,7 +361,7 @@ export default function SwarmPage() {
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                {wallets.map((w) => (
+                                                {walletsList.map((w) => (
                                                     <tr key={w.id} className="border-b border-white/5 hover:bg-white/[0.02]">
                                                         <td className="p-3">
                                                             <div className="font-medium">{w.label}</div>
@@ -423,7 +434,7 @@ export default function SwarmPage() {
                                                             </span>
                                                         </td>
                                                         <td className="p-3 text-right font-mono">${exec.totalAmount.toFixed(2)}</td>
-                                                        <td className="p-3 text-right">{exec.walletsUsed}</td>
+                                                        <td className="p-3 text-right">{exec.walletsListUsed}</td>
                                                         <td className="p-3 text-right font-mono">${exec.avgPrice.toFixed(4)}</td>
                                                         <td className="p-3 text-right">
                                                             <span className={cn(

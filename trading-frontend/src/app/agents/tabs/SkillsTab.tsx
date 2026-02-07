@@ -6,6 +6,10 @@ import { Sparkles, Star, Play, RefreshCw, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import api from "@/lib/api";
 
+interface SkillsTabProps {
+    walletAddress: string | null;
+}
+
 interface Skill {
     id: string;
     name: string;
@@ -16,23 +20,22 @@ interface Skill {
     usageCount?: number;
 }
 
-export default function SkillsTab() {
+export default function SkillsTab({ walletAddress }: SkillsTabProps) {
     const [skills, setSkills] = useState<Record<string, Skill[]>>({});
     const [favorites, setFavorites] = useState<string[]>([]);
     const [loading, setLoading] = useState(true);
     const [executing, setExecuting] = useState<string | null>(null);
-    const wallet = "demo-wallet";
 
     useEffect(() => {
         loadData();
-    }, []);
+    }, [walletAddress]);
 
     const loadData = async () => {
         setLoading(true);
         try {
             const [skillsRes, favoritesRes] = await Promise.all([
                 api.getSkillsByCategory(),
-                api.getFavoriteSkills(wallet),
+                walletAddress ? api.getFavoriteSkills(walletAddress) : Promise.resolve({ success: true, data: [] }),
             ]);
             if (skillsRes.success && skillsRes.data) {
                 setSkills(skillsRes.data as Record<string, Skill[]>);
@@ -48,9 +51,10 @@ export default function SkillsTab() {
     };
 
     const handleExecuteSkill = async (skillId: string) => {
+        if (!walletAddress) return;
         setExecuting(skillId);
         try {
-            await api.executeSkill(skillId, wallet, {});
+            await api.executeSkill(skillId, walletAddress, {});
         } catch (error) {
             console.error('Failed to execute skill:', error);
         } finally {
@@ -59,12 +63,13 @@ export default function SkillsTab() {
     };
 
     const handleToggleFavorite = async (skillId: string) => {
+        if (!walletAddress) return;
         try {
             if (favorites.includes(skillId)) {
-                await api.removeFavoriteSkill(wallet, skillId);
+                await api.removeFavoriteSkill(walletAddress, skillId);
                 setFavorites(prev => prev.filter(id => id !== skillId));
             } else {
-                await api.addFavoriteSkill(wallet, skillId);
+                await api.addFavoriteSkill(walletAddress, skillId);
                 setFavorites(prev => [...prev, skillId]);
             }
         } catch (error) {

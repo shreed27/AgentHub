@@ -4,10 +4,12 @@ import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
     HeartPulse, TrendingUp, TrendingDown, Shield, AlertTriangle,
-    RefreshCw, Settings, Activity, Gauge, Clock, DollarSign, Zap
+    RefreshCw, Settings, Activity, Gauge, Clock, DollarSign, Zap, Wallet
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import api from "@/lib/api";
+import { useWallet } from "@solana/wallet-adapter-react";
+import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 
 interface SurvivalConfig {
     id: string;
@@ -61,21 +63,29 @@ const STATE_CONFIGS: StateConfig[] = [
 ];
 
 export default function SurvivalPage() {
+    const { publicKey, connected } = useWallet();
+    const { setVisible } = useWalletModal();
     const [config, setConfig] = useState<SurvivalConfig | null>(null);
     const [metrics, setMetrics] = useState<SurvivalMetrics | null>(null);
     const [history, setHistory] = useState<StateHistory[]>([]);
     const [loading, setLoading] = useState(true);
     const [showSettings, setShowSettings] = useState(false);
 
-    const wallet = "demo-wallet";
+    const wallet = connected && publicKey ? publicKey.toBase58() : null;
 
     useEffect(() => {
-        loadData();
-        const interval = setInterval(loadData, 30000); // Refresh every 30 seconds
-        return () => clearInterval(interval);
-    }, []);
+        if (wallet) {
+            loadData();
+            const interval = setInterval(loadData, 30000); // Refresh every 30 seconds
+            return () => clearInterval(interval);
+        } else {
+            setLoading(false);
+        }
+    }, [wallet]);
 
     const loadData = async () => {
+        if (!wallet) return;
+
         try {
             const dashboardRes = await api.getSurvivalDashboard(wallet);
             if (dashboardRes.success) {
@@ -92,6 +102,7 @@ export default function SurvivalPage() {
     };
 
     const toggleSurvivalMode = async () => {
+        if (!wallet) return;
         try {
             const newEnabled = !config?.enabled;
             await api.toggleSurvivalMode(wallet, newEnabled);

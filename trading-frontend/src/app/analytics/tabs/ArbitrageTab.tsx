@@ -6,6 +6,10 @@ import { ArrowLeftRight, RefreshCw, TrendingUp, DollarSign, Target, Activity, Pl
 import { cn } from "@/lib/utils";
 import api from "@/lib/api";
 
+interface ArbitrageTabProps {
+    walletAddress: string | null;
+}
+
 interface ArbitrageOpportunity {
     id: string;
     token: string;
@@ -17,14 +21,13 @@ interface ArbitrageOpportunity {
     confidence: number;
 }
 
-export default function ArbitrageTab() {
+export default function ArbitrageTab({ walletAddress }: ArbitrageTabProps) {
     const [opportunities, setOpportunities] = useState<ArbitrageOpportunity[]>([]);
     const [loading, setLoading] = useState(true);
-    const wallet = "demo-wallet";
 
     useEffect(() => {
         loadData();
-    }, []);
+    }, [walletAddress]);
 
     const loadData = async () => {
         setLoading(true);
@@ -41,8 +44,9 @@ export default function ArbitrageTab() {
     };
 
     const executeArbitrage = async (oppId: string) => {
+        if (!walletAddress) return;
         try {
-            await api.executeArbitrage(oppId, wallet, 100);
+            await api.executeArbitrage(oppId, walletAddress, 100);
             loadData();
         } catch (error) {
             console.error('Failed to execute arbitrage:', error);

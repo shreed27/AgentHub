@@ -5,6 +5,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Wallet, FileText, ArrowLeftRight, RefreshCcw, DollarSign, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import dynamic from "next/dynamic";
+import { useWallet } from "@solana/wallet-adapter-react";
+import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 
 const HoldingsTab = dynamic(() => import("./tabs/HoldingsTab"), { ssr: false });
 const TradeLedgerTab = dynamic(() => import("./tabs/TradeLedgerTab"), { ssr: false });
@@ -17,16 +19,20 @@ const tabs = [
 ];
 
 export default function PortfolioPage() {
+    const { publicKey, connected } = useWallet();
+    const { setVisible } = useWalletModal();
     const [activeTab, setActiveTab] = useState("holdings");
+
+    const walletAddress = connected && publicKey ? publicKey.toBase58() : null;
 
     const renderTabContent = () => {
         switch (activeTab) {
             case "holdings":
                 return <HoldingsTab />;
             case "ledger":
-                return <TradeLedgerTab />;
+                return <TradeLedgerTab walletAddress={walletAddress} />;
             case "bridge":
-                return <EVMBridgeTab />;
+                return <EVMBridgeTab walletAddress={walletAddress} />;
             default:
                 return <HoldingsTab />;
         }
