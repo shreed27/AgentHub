@@ -1,29 +1,67 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { Plus, Play, Pause, Settings, Zap, Shield, Target, Cpu, Activity, Signal } from "lucide-react";
+import { Plus, Play, Pause, Settings, Zap, Shield, Target, Cpu, Activity, Signal, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import api from "@/lib/api";
 
 interface Agent {
     id: string;
     name: string;
-    type: "Market Maker" | "Arbitrage" | "Sentiment" | "Liquidation";
-    status: "active" | "idle" | "error" | "paused";
-    uptime: string;
+    type: string;
+    status: string;
     pnl: number;
     trades: number;
     winRate: number;
+    createdAt?: number;
 }
 
-const agents: Agent[] = [
-    { id: "1", name: "Alpha-1", type: "Market Maker", status: "active", uptime: "4d 12h", pnl: 12450, trades: 1420, winRate: 68 },
-    { id: "2", name: "Gamma-Ray", type: "Arbitrage", status: "active", uptime: "12h 30m", pnl: 8200, trades: 850, winRate: 92 },
-    { id: "3", name: "Delta-V", type: "Sentiment", status: "paused", uptime: "0m", pnl: -120, trades: 45, winRate: 45 },
-    { id: "4", name: "Omega-X", type: "Liquidation", status: "idle", uptime: "1d 4h", pnl: 0, trades: 0, winRate: 0 },
-    { id: "5", name: "Theta-Prime", type: "Market Maker", status: "active", uptime: "2d 8h", pnl: 5600, trades: 620, winRate: 74 },
-];
-
 export default function AgentsPage() {
+    const [agents, setAgents] = useState<Agent[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    const fetchAgents = async () => {
+        try {
+            const response = await api.getAgents();
+            if (response.success && response.data) {
+                const agentList = response.data.map(a => ({
+                    id: a.id,
+                    name: a.name,
+                    type: a.type,
+                    status: a.status,
+                    pnl: a.performance?.totalPnL || 0,
+                    trades: a.performance?.totalTrades || 0,
+                    winRate: a.performance?.winRate || 0,
+                }));
+                setAgents(agentList);
+            }
+        } catch (error) {
+            console.error('Failed to fetch agents:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        fetchAgents();
+        const interval = setInterval(fetchAgents, 15000);
+        return () => clearInterval(interval);
+    }, []);
+
+    const handleToggleStatus = async (agentId: string, currentStatus: string) => {
+        const newStatus = currentStatus === 'active' ? 'paused' : 'active';
+        try {
+            const response = await api.updateAgentStatus(agentId, newStatus);
+            if (response.success) {
+                setAgents(prev => prev.map(a =>
+                    a.id === agentId ? { ...a, status: newStatus } : a
+                ));
+            }
+        } catch (error) {
+            console.error('Failed to update agent status:', error);
+        }
+    };
     return (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
 
@@ -42,17 +80,29 @@ export default function AgentsPage() {
             </div>
 
             {/* Agent Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                {agents.map((agent, i) => (
-                    <AgentCard key={agent.id} agent={agent} index={i} />
-                ))}
-            </div>
+            {loading ? (
+                <div className="flex items-center justify-center h-64">
+                    <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+                </div>
+            ) : agents.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                    {agents.map((agent, i) => (
+                        <AgentCard key={agent.id} agent={agent} index={i} onToggleStatus={handleToggleStatus} />
+                    ))}
+                </div>
+            ) : (
+                <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
+                    <Cpu className="w-12 h-12 mb-4 opacity-50" />
+                    <p>No agents deployed yet</p>
+                    <p className="text-sm mt-1">Click "New Agent" to create your first agent</p>
+                </div>
+            )}
 
         </div>
     );
 }
 
-function AgentCard({ agent, index }: { agent: Agent, index: number }) {
+function AgentCard({ agent, index, onToggleStatus }: { agent: Agent, index: number, onToggleStatus: (id: string, status: string) => void }) {
     const isPositive = agent.pnl >= 0;
     const isActive = agent.status === 'active';
 
@@ -134,12 +184,15 @@ function AgentCard({ agent, index }: { agent: Agent, index: number }) {
 
             {/* Subtle Footer */}
             <div className="p-4 border-t border-border/40 bg-muted/5 flex gap-3">
-                <button className={cn(
-                    "flex-1 h-9 rounded-lg flex items-center justify-center gap-2 text-[13px] font-medium transition-all shadow-sm active:scale-[0.98]",
-                    isActive
-                        ? "bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 border border-border hover:border-zinc-400 dark:hover:border-zinc-500"
-                        : "bg-primary text-primary-foreground hover:opacity-90 shadow-primary/20"
-                )}>
+                <button
+                    onClick={() => onToggleStatus(agent.id, agent.status)}
+                    className={cn(
+                        "flex-1 h-9 rounded-lg flex items-center justify-center gap-2 text-[13px] font-medium transition-all shadow-sm active:scale-[0.98]",
+                        isActive
+                            ? "bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 border border-border hover:border-zinc-400 dark:hover:border-zinc-500"
+                            : "bg-primary text-primary-foreground hover:opacity-90 shadow-primary/20"
+                    )}
+                >
                     {isActive ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
                     {isActive ? "Pause Agent" : "Deploy Algorithm"}
                 </button>

@@ -1,11 +1,15 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { ArrowDown, ArrowUp, Activity, Timer, Wallet, Layers } from "lucide-react";
+import { ArrowDown, ArrowUp, Activity, Timer, Wallet, Layers, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import { io, Socket } from "socket.io-client";
+import api from "@/lib/api";
 
-// Types for simulated data
+const GATEWAY_URL = process.env.NEXT_PUBLIC_GATEWAY_URL || 'http://localhost:4000';
+
+// Types for data
 interface Order {
     id: string;
     price: number;
@@ -23,13 +27,62 @@ interface Trade {
     side: "buy" | "sell";
 }
 
+interface ExecutionStats {
+    totalExecutions: number;
+    avgExecutionTimeMs: number;
+    successRate: number;
+}
+
 export default function ExecutionPage() {
     const [bids, setBids] = useState<Order[]>([]);
     const [asks, setAsks] = useState<Order[]>([]);
     const [trades, setTrades] = useState<Trade[]>([]);
     const [price, setPrice] = useState(145.20);
+    const [connected, setConnected] = useState(false);
+    const [stats, setStats] = useState<ExecutionStats | null>(null);
+    const socketRef = useRef<Socket | null>(null);
 
-    // Generate simulated order book data
+    // Connect to WebSocket for real-time price updates
+    useEffect(() => {
+        const socket = io(GATEWAY_URL, {
+            transports: ['websocket', 'polling'],
+        });
+        socketRef.current = socket;
+
+        socket.on('connect', () => {
+            setConnected(true);
+            socket.emit('subscribe', ['market', 'execution']);
+        });
+
+        socket.on('disconnect', () => {
+            setConnected(false);
+        });
+
+        socket.on('price_update', (data: { data: { price?: number } }) => {
+            if (data.data?.price) {
+                setPrice(data.data.price);
+            }
+        });
+
+        socket.on('execution_completed', (data: { data: { executedPrice?: number; action?: string; executedAmount?: number } }) => {
+            if (data.data) {
+                const trade: Trade = {
+                    id: Math.random().toString(36),
+                    time: new Date().toLocaleTimeString([], { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" }),
+                    price: data.data.executedPrice || price,
+                    size: data.data.executedAmount || 0,
+                    side: data.data.action === 'buy' ? 'buy' : 'sell',
+                };
+                setTrades(prev => [trade, ...prev].slice(0, 20));
+            }
+        });
+
+        return () => {
+            socket.disconnect();
+        };
+    }, []);
+
+    // Generate simulated order book data (still needed as we don't have real order book API)
     useEffect(() => {
         const generateBook = () => {
             const newBids = Array.from({ length: 15 }).map((_, i) => ({
@@ -57,7 +110,7 @@ export default function ExecutionPage() {
         return () => clearInterval(interval);
     }, [price]);
 
-    // Generate simulated simulated live trades
+    // Generate simulated live trades if not receiving real ones
     useEffect(() => {
         const interval = setInterval(() => {
             const isBuy = Math.random() > 0.5;
@@ -80,13 +133,20 @@ export default function ExecutionPage() {
             {/* Top Stats Bar */}
             <div className="flex items-center gap-6 p-4 rounded-xl border border-white/5 bg-white/[0.02] backdrop-blur-sm">
                 <div className="flex items-center gap-3 pr-6 border-r border-white/5">
-                    <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-400">
+                    <div className={cn(
+                        "w-10 h-10 rounded-lg flex items-center justify-center",
+                        connected ? "bg-blue-500/10 text-blue-400" : "bg-orange-500/10 text-orange-400"
+                    )}>
                         <Activity className="w-5 h-5" />
                     </div>
                     <div>
                         <div className="text-xs text-muted-foreground uppercase">Market Status</div>
                         <div className="font-bold text-white flex items-center gap-2">
-                            Liquid <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                            {connected ? 'Connected' : 'Connecting...'}
+                            <span className={cn(
+                                "w-2 h-2 rounded-full",
+                                connected ? "bg-green-500 animate-pulse" : "bg-orange-500"
+                            )} />
                         </div>
                     </div>
                 </div>
