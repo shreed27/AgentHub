@@ -330,3 +330,88 @@ executionRouter.get('/stats', (req: Request, res: Response) => {
     data: stats,
   });
 });
+
+// POST /api/v1/execution/swap-transaction - Get unsigned swap transaction for frontend signing
+executionRouter.post('/swap-transaction', async (req: Request, res: Response) => {
+  const logger = req.app.locals.logger;
+  const serviceRegistry: ServiceRegistry = req.app.locals.serviceRegistry;
+
+  try {
+    const { inputMint, outputMint, amount, slippageBps = 50, userPublicKey } = req.body;
+
+    if (!inputMint || !outputMint || !amount || !userPublicKey) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields: inputMint, outputMint, amount, userPublicKey',
+      });
+    }
+
+    // Get quote from Jupiter
+    const quoteUrl = new URL('https://quote-api.jup.ag/v6/quote');
+    quoteUrl.searchParams.set('inputMint', inputMint);
+    quoteUrl.searchParams.set('outputMint', outputMint);
+    quoteUrl.searchParams.set('amount', amount);
+    quoteUrl.searchParams.set('slippageBps', slippageBps.toString());
+
+    const quoteResponse = await fetch(quoteUrl.toString());
+    if (!quoteResponse.ok) {
+      const errorText = await quoteResponse.text();
+      logger.error({ errorText }, 'Jupiter quote failed');
+      return res.status(502).json({
+        success: false,
+        error: 'Failed to get quote from Jupiter',
+        details: errorText,
+      });
+    }
+
+    const quoteData = await quoteResponse.json();
+
+    // Get swap transaction from Jupiter (unsigned)
+    const swapResponse = await fetch('https://quote-api.jup.ag/v6/swap', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        quoteResponse: quoteData,
+        userPublicKey,
+        wrapAndUnwrapSol: true,
+        dynamicComputeUnitLimit: true,
+        prioritizationFeeLamports: 'auto',
+      }),
+    });
+
+    if (!swapResponse.ok) {
+      const errorText = await swapResponse.text();
+      logger.error({ errorText }, 'Jupiter swap transaction failed');
+      return res.status(502).json({
+        success: false,
+        error: 'Failed to get swap transaction from Jupiter',
+        details: errorText,
+      });
+    }
+
+    const swapData = await swapResponse.json();
+
+    logger.info({ inputMint, outputMint, amount, userPublicKey }, 'Swap transaction created for frontend signing');
+
+    res.json({
+      success: true,
+      data: {
+        swapTransaction: swapData.swapTransaction,
+        inputAmount: quoteData.inAmount,
+        outputAmount: quoteData.outAmount,
+        priceImpact: quoteData.priceImpactPct,
+        routePlan: quoteData.routePlan?.map((r: { swapInfo: { label: string }; percent: number }) => ({
+          protocol: r.swapInfo.label,
+          percent: r.percent,
+        })) || [],
+      },
+    });
+  } catch (error) {
+    logger.error({ error }, 'Failed to create swap transaction');
+    res.status(500).json({
+      success: false,
+      error: 'Failed to create swap transaction',
+      message: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});

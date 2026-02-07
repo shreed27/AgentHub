@@ -22,13 +22,50 @@ import {
 } from '@solana/spl-token';
 import bs58 from 'bs58';
 
-// Constants - use env vars for wallets, fallback to hardcoded
-export const ESCROW_WALLET = new PublicKey(
-  process.env.ESCROW_WALLET_ADDRESS || 'EwwpAe2XkBbMAftrX9m1PEu3mEnL6Gordc49EWKRURau'
-);
-export const TREASURY_WALLET = new PublicKey(
-  process.env.TREASURY_WALLET_ADDRESS || '7G7co8fLDdddRNbFwPWH9gots93qB4EXPwBoshd3x2va'
-);
+// Check if simulation mode is explicitly enabled
+function isSimulationMode(): boolean {
+  return process.env.SOLANA_SIMULATION_MODE === 'true';
+}
+
+// SECURITY: Warn loudly if simulation mode is enabled in production
+if (process.env.NODE_ENV === 'production' && isSimulationMode()) {
+  console.error('================================================================================');
+  console.error('FATAL SECURITY WARNING: SOLANA_SIMULATION_MODE=true in production is DANGEROUS');
+  console.error('This allows fake transactions to be accepted as valid.');
+  console.error('Set SOLANA_SIMULATION_MODE=false for production deployments.');
+  console.error('================================================================================');
+}
+
+// Helper to get required env or throw
+function getRequiredEnv(key: string): string {
+  const value = process.env[key];
+  if (!value) {
+    throw new Error(`Required environment variable ${key} is not set`);
+  }
+  return value;
+}
+
+// Helper to convert SOL to lamports avoiding floating point errors
+function solToLamports(sol: number): bigint {
+  // Use string conversion to avoid floating point errors
+  const solStr = sol.toFixed(9);
+  const [whole, decimal = ''] = solStr.split('.');
+  const paddedDecimal = decimal.padEnd(9, '0').slice(0, 9);
+  return BigInt(whole + paddedDecimal);
+}
+
+// Constants - require env vars in production, allow fallback in dev
+function getWalletAddress(envKey: string, fallback: string): PublicKey {
+  const address = process.env[envKey];
+  if (!address && process.env.NODE_ENV === 'production') {
+    throw new Error(`${envKey} is required in production`);
+  }
+  return new PublicKey(address || fallback);
+}
+
+export const ESCROW_WALLET = getWalletAddress('ESCROW_WALLET_ADDRESS', 'EwwpAe2XkBbMAftrX9m1PEu3mEnL6Gordc49EWKRURau');
+export const TREASURY_WALLET = getWalletAddress('TREASURY_WALLET_ADDRESS', '7G7co8fLDdddRNbFwPWH9gots93qB4EXPwBoshd3x2va');
+
 export const CREATION_FEE_PERCENT = 0.025; // 2.5%
 export const PAYOUT_FEE_PERCENT = 0.025;   // 2.5%
 export const MIN_BOUNTY_SOL = 0.1;
@@ -47,7 +84,12 @@ export function getConnection(): Connection {
 function getEscrowKeypair(): Keypair | null {
   const secretKey = process.env.ESCROW_PRIVATE_KEY;
   if (!secretKey) {
-    console.warn('ESCROW_PRIVATE_KEY not set - transactions will be simulated');
+    if (process.env.NODE_ENV === 'production' && !isSimulationMode()) {
+      throw new Error(
+        'ESCROW_PRIVATE_KEY required in production. Set SOLANA_SIMULATION_MODE=true for testing.'
+      );
+    }
+    console.warn('[SIMULATION] ESCROW_PRIVATE_KEY not set - using simulation mode');
     return null;
   }
   return Keypair.fromSecretKey(bs58.decode(secretKey));
@@ -70,7 +112,14 @@ export async function getUsdcBalance(wallet: string): Promise<number> {
     const tokenAccount = await getAssociatedTokenAddress(USDC_MINT, publicKey);
     const account = await getAccount(connection, tokenAccount);
     return Number(account.amount) / 1_000_000; // USDC has 6 decimals
-  } catch {
+  } catch (error: any) {
+    // Token account doesn't exist = 0 balance (common case)
+    if (error?.message?.includes('could not find account') ||
+        error?.message?.includes('TokenAccountNotFoundError')) {
+      return 0;
+    }
+    // Log unexpected errors
+    console.error('[Solana] Error getting USDC balance:', error?.message || error);
     return 0;
   }
 }
@@ -91,10 +140,13 @@ export function createSolTransferInstruction(
   to: PublicKey,
   amount: number
 ): ReturnType<typeof SystemProgram.transfer> {
+  // Use safe conversion to avoid floating point errors
+  const lamports = Number(solToLamports(amount));
+
   return SystemProgram.transfer({
     fromPubkey: from,
     toPubkey: to,
-    lamports: Math.floor(amount * LAMPORTS_PER_SOL),
+    lamports,
   });
 }
 
@@ -106,8 +158,14 @@ export async function transferSolFromEscrow(
   const escrowKeypair = getEscrowKeypair();
 
   if (!escrowKeypair) {
-    // Simulation mode
-    console.log(`[SIMULATED] Transfer ${amount} SOL to ${recipient}`);
+    // Simulation mode - only allowed with explicit flag
+    if (!isSimulationMode()) {
+      return {
+        success: false,
+        error: 'Cannot transfer: ESCROW_PRIVATE_KEY not configured and SOLANA_SIMULATION_MODE is not enabled'
+      };
+    }
+    console.warn(`[SIMULATION] Transfer ${amount} SOL to ${recipient}`);
     return {
       success: true,
       signature: `simulated_${Date.now()}_${Math.random().toString(36).slice(2)}`
@@ -154,8 +212,14 @@ export async function transferUsdcFromEscrow(
   const escrowKeypair = getEscrowKeypair();
 
   if (!escrowKeypair) {
-    // Simulation mode
-    console.log(`[SIMULATED] Transfer ${amount} USDC to ${recipient}`);
+    // Simulation mode - only allowed with explicit flag
+    if (!isSimulationMode()) {
+      return {
+        success: false,
+        error: 'Cannot transfer: ESCROW_PRIVATE_KEY not configured and SOLANA_SIMULATION_MODE is not enabled'
+      };
+    }
+    console.warn(`[SIMULATION] Transfer ${amount} USDC to ${recipient}`);
     return {
       success: true,
       signature: `simulated_usdc_${Date.now()}_${Math.random().toString(36).slice(2)}`
@@ -200,8 +264,14 @@ export async function transferFromEscrow(
   if (token === 'SOL') {
     return transferSolFromEscrow(recipient, amount);
   }
-  // Simulate transfer for other tokens (META, ORE, etc.)
-  console.log(`[SIMULATED] Transfer ${amount} ${token} to ${recipient}`);
+  // Simulate transfer for other tokens (META, ORE, etc.) - only in simulation mode
+  if (!isSimulationMode()) {
+    return {
+      success: false,
+      error: `Token ${token} transfers not supported. Only SOL and USDC are supported in production.`
+    };
+  }
+  console.warn(`[SIMULATION] Transfer ${amount} ${token} to ${recipient}`);
   return {
     success: true,
     signature: `simulated_${token.toLowerCase()}_${Date.now()}_${Math.random().toString(36).slice(2)}`
@@ -213,10 +283,17 @@ export async function verifyDeposit(
   signature: string,
   expectedFrom: string,
   expectedAmount: number
-): Promise<{ verified: boolean; actualAmount?: number; error?: string }> {
-  // In simulation mode, accept any signature starting with "simulated_"
+): Promise<{ verified: boolean; actualAmount?: number; error?: string; isSimulated?: boolean }> {
+  // SECURITY: Only accept simulated_ signatures when SOLANA_SIMULATION_MODE is explicitly enabled
   if (signature.startsWith('simulated_')) {
-    return { verified: true, actualAmount: expectedAmount };
+    if (!isSimulationMode()) {
+      return {
+        verified: false,
+        error: 'Invalid signature: simulated_ prefix only allowed when SOLANA_SIMULATION_MODE=true'
+      };
+    }
+    console.warn('[SIMULATION] Accepting simulated deposit signature');
+    return { verified: true, actualAmount: expectedAmount, isSimulated: true };
   }
 
   try {

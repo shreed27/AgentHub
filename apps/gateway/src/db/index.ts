@@ -49,6 +49,8 @@ export function getDatabase(): Database.Database {
   return db;
 }
 
+export const getDb = getDatabase;
+
 export function closeDatabase(): void {
   if (db) {
     db.close();

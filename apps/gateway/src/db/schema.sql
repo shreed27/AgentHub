@@ -1071,3 +1071,788 @@ CREATE INDEX IF NOT EXISTS idx_bridge_tx_wallet ON bridge_transactions(user_wall
 CREATE INDEX IF NOT EXISTS idx_bridge_tx_status ON bridge_transactions(status);
 CREATE INDEX IF NOT EXISTS idx_bridge_tx_source_chain ON bridge_transactions(source_chain);
 CREATE INDEX IF NOT EXISTS idx_bridge_tx_target_chain ON bridge_transactions(target_chain);
+
+-- ==================== Phase 4: Solana DEX Integration Tables ====================
+
+-- Raydium Positions table - CLMM concentrated liquidity positions
+CREATE TABLE IF NOT EXISTS raydium_positions (
+  id TEXT PRIMARY KEY,
+  user_wallet TEXT NOT NULL,
+  pool_id TEXT NOT NULL,
+  nft_mint TEXT, -- position NFT mint for CLMM
+  position_type TEXT NOT NULL CHECK (position_type IN ('clmm', 'amm')),
+  tick_lower INTEGER,
+  tick_upper INTEGER,
+  price_lower REAL,
+  price_upper REAL,
+  liquidity TEXT, -- BN as string
+  token_a_mint TEXT NOT NULL,
+  token_b_mint TEXT NOT NULL,
+  token_a_amount REAL NOT NULL DEFAULT 0,
+  token_b_amount REAL NOT NULL DEFAULT 0,
+  fee_owed_a REAL DEFAULT 0,
+  fee_owed_b REAL DEFAULT 0,
+  reward_owed REAL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'closed', 'pending')),
+  opened_at INTEGER NOT NULL,
+  closed_at INTEGER,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_raydium_positions_wallet ON raydium_positions(user_wallet);
+CREATE INDEX IF NOT EXISTS idx_raydium_positions_pool ON raydium_positions(pool_id);
+CREATE INDEX IF NOT EXISTS idx_raydium_positions_status ON raydium_positions(status);
+
+-- Raydium Swap History table
+CREATE TABLE IF NOT EXISTS raydium_swaps (
+  id TEXT PRIMARY KEY,
+  user_wallet TEXT NOT NULL,
+  pool_id TEXT,
+  input_mint TEXT NOT NULL,
+  output_mint TEXT NOT NULL,
+  input_amount REAL NOT NULL,
+  output_amount REAL NOT NULL,
+  min_output_amount REAL,
+  price_impact REAL,
+  fee_amount REAL DEFAULT 0,
+  tx_signature TEXT,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'confirmed', 'failed')),
+  created_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_raydium_swaps_wallet ON raydium_swaps(user_wallet);
+CREATE INDEX IF NOT EXISTS idx_raydium_swaps_status ON raydium_swaps(status);
+
+-- Orca Positions table - Whirlpool positions
+CREATE TABLE IF NOT EXISTS orca_positions (
+  id TEXT PRIMARY KEY,
+  user_wallet TEXT NOT NULL,
+  position_address TEXT NOT NULL UNIQUE,
+  whirlpool_address TEXT NOT NULL,
+  tick_lower_index INTEGER NOT NULL,
+  tick_upper_index INTEGER NOT NULL,
+  liquidity TEXT NOT NULL, -- BN as string
+  token_a_mint TEXT NOT NULL,
+  token_b_mint TEXT NOT NULL,
+  token_a_amount REAL NOT NULL DEFAULT 0,
+  token_b_amount REAL NOT NULL DEFAULT 0,
+  fee_owed_a REAL DEFAULT 0,
+  fee_owed_b REAL DEFAULT 0,
+  reward_owed_0 REAL DEFAULT 0,
+  reward_owed_1 REAL DEFAULT 0,
+  reward_owed_2 REAL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'closed', 'pending')),
+  opened_at INTEGER NOT NULL,
+  closed_at INTEGER,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_orca_positions_wallet ON orca_positions(user_wallet);
+CREATE INDEX IF NOT EXISTS idx_orca_positions_whirlpool ON orca_positions(whirlpool_address);
+CREATE INDEX IF NOT EXISTS idx_orca_positions_status ON orca_positions(status);
+
+-- Orca Swap History table
+CREATE TABLE IF NOT EXISTS orca_swaps (
+  id TEXT PRIMARY KEY,
+  user_wallet TEXT NOT NULL,
+  whirlpool_address TEXT,
+  input_mint TEXT NOT NULL,
+  output_mint TEXT NOT NULL,
+  input_amount REAL NOT NULL,
+  output_amount REAL NOT NULL,
+  slippage_bps INTEGER,
+  price_impact REAL,
+  fee_amount REAL DEFAULT 0,
+  tx_signature TEXT,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'confirmed', 'failed')),
+  created_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_orca_swaps_wallet ON orca_swaps(user_wallet);
+CREATE INDEX IF NOT EXISTS idx_orca_swaps_status ON orca_swaps(status);
+
+-- Meteora Positions table - DLMM positions
+CREATE TABLE IF NOT EXISTS meteora_positions (
+  id TEXT PRIMARY KEY,
+  user_wallet TEXT NOT NULL,
+  position_address TEXT NOT NULL UNIQUE,
+  lb_pair_address TEXT NOT NULL,
+  lower_bin_id INTEGER NOT NULL,
+  upper_bin_id INTEGER NOT NULL,
+  total_x_amount TEXT NOT NULL, -- BN as string
+  total_y_amount TEXT NOT NULL, -- BN as string
+  fee_x REAL DEFAULT 0,
+  fee_y REAL DEFAULT 0,
+  reward_one REAL DEFAULT 0,
+  reward_two REAL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'closed', 'pending')),
+  opened_at INTEGER NOT NULL,
+  closed_at INTEGER,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_meteora_positions_wallet ON meteora_positions(user_wallet);
+CREATE INDEX IF NOT EXISTS idx_meteora_positions_pool ON meteora_positions(lb_pair_address);
+CREATE INDEX IF NOT EXISTS idx_meteora_positions_status ON meteora_positions(status);
+
+-- Meteora Swap History table
+CREATE TABLE IF NOT EXISTS meteora_swaps (
+  id TEXT PRIMARY KEY,
+  user_wallet TEXT NOT NULL,
+  lb_pair_address TEXT,
+  input_mint TEXT NOT NULL,
+  output_mint TEXT NOT NULL,
+  input_amount REAL NOT NULL,
+  output_amount REAL NOT NULL,
+  slippage_bps INTEGER,
+  price_impact REAL,
+  fee_amount REAL DEFAULT 0,
+  tx_signature TEXT,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'confirmed', 'failed')),
+  created_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_meteora_swaps_wallet ON meteora_swaps(user_wallet);
+CREATE INDEX IF NOT EXISTS idx_meteora_swaps_status ON meteora_swaps(status);
+
+-- Drift Positions table - Perp and Spot positions on Drift Protocol
+CREATE TABLE IF NOT EXISTS drift_positions (
+  id TEXT PRIMARY KEY,
+  user_wallet TEXT NOT NULL,
+  account_pubkey TEXT,
+  market_index INTEGER NOT NULL,
+  market_type TEXT NOT NULL CHECK (market_type IN ('perp', 'spot')),
+  base_asset_amount TEXT NOT NULL, -- BN as string
+  quote_asset_amount TEXT NOT NULL, -- BN as string
+  side TEXT NOT NULL CHECK (side IN ('long', 'short')),
+  entry_price REAL,
+  mark_price REAL,
+  unrealized_pnl REAL DEFAULT 0,
+  realized_pnl REAL DEFAULT 0,
+  leverage REAL DEFAULT 1,
+  liquidation_price REAL,
+  status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'closed', 'liquidated')),
+  opened_at INTEGER NOT NULL,
+  closed_at INTEGER,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_drift_positions_wallet ON drift_positions(user_wallet);
+CREATE INDEX IF NOT EXISTS idx_drift_positions_market ON drift_positions(market_index, market_type);
+CREATE INDEX IF NOT EXISTS idx_drift_positions_status ON drift_positions(status);
+
+-- Drift Orders table
+CREATE TABLE IF NOT EXISTS drift_orders (
+  id TEXT PRIMARY KEY,
+  user_wallet TEXT NOT NULL,
+  account_pubkey TEXT,
+  order_id INTEGER,
+  market_index INTEGER NOT NULL,
+  market_type TEXT NOT NULL CHECK (market_type IN ('perp', 'spot')),
+  side TEXT NOT NULL CHECK (side IN ('buy', 'sell')),
+  order_type TEXT NOT NULL CHECK (order_type IN ('limit', 'market', 'trigger_market', 'trigger_limit')),
+  base_asset_amount TEXT NOT NULL,
+  price TEXT,
+  trigger_price TEXT,
+  reduce_only INTEGER DEFAULT 0,
+  post_only INTEGER DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'open', 'filled', 'cancelled', 'expired')),
+  filled_amount TEXT DEFAULT '0',
+  avg_fill_price REAL,
+  tx_signature TEXT,
+  error TEXT,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_drift_orders_wallet ON drift_orders(user_wallet);
+CREATE INDEX IF NOT EXISTS idx_drift_orders_market ON drift_orders(market_index, market_type);
+CREATE INDEX IF NOT EXISTS idx_drift_orders_status ON drift_orders(status);
+
+-- Pump.fun Trades table
+CREATE TABLE IF NOT EXISTS pumpfun_trades (
+  id TEXT PRIMARY KEY,
+  user_wallet TEXT NOT NULL,
+  token_mint TEXT NOT NULL,
+  token_symbol TEXT,
+  action TEXT NOT NULL CHECK (action IN ('buy', 'sell')),
+  sol_amount REAL NOT NULL,
+  token_amount REAL NOT NULL,
+  price_per_token REAL NOT NULL,
+  fee_amount REAL DEFAULT 0,
+  bonding_progress REAL, -- 0-1 progress toward graduation
+  was_graduated INTEGER DEFAULT 0,
+  tx_signature TEXT,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'confirmed', 'failed')),
+  created_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_pumpfun_trades_wallet ON pumpfun_trades(user_wallet);
+CREATE INDEX IF NOT EXISTS idx_pumpfun_trades_token ON pumpfun_trades(token_mint);
+CREATE INDEX IF NOT EXISTS idx_pumpfun_trades_status ON pumpfun_trades(status);
+
+-- Pump.fun Token Watchlist table
+CREATE TABLE IF NOT EXISTS pumpfun_watchlist (
+  id TEXT PRIMARY KEY,
+  user_wallet TEXT NOT NULL,
+  token_mint TEXT NOT NULL,
+  token_symbol TEXT,
+  token_name TEXT,
+  added_price REAL,
+  current_price REAL,
+  bonding_progress REAL,
+  notes TEXT,
+  alerts_enabled INTEGER DEFAULT 1,
+  graduation_alert INTEGER DEFAULT 1,
+  price_alert_above REAL,
+  price_alert_below REAL,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  UNIQUE(user_wallet, token_mint)
+);
+
+CREATE INDEX IF NOT EXISTS idx_pumpfun_watchlist_wallet ON pumpfun_watchlist(user_wallet);
+CREATE INDEX IF NOT EXISTS idx_pumpfun_watchlist_token ON pumpfun_watchlist(token_mint);
+
+-- DCA Plans table - Jupiter DCA orders
+CREATE TABLE IF NOT EXISTS dca_plans (
+  id TEXT PRIMARY KEY,
+  user_wallet TEXT NOT NULL,
+  dca_pubkey TEXT, -- on-chain DCA account
+  input_mint TEXT NOT NULL,
+  output_mint TEXT NOT NULL,
+  input_mint_symbol TEXT,
+  output_mint_symbol TEXT,
+  total_input_amount REAL NOT NULL,
+  input_amount_per_cycle REAL NOT NULL,
+  cycle_frequency_seconds INTEGER NOT NULL,
+  min_output_per_cycle REAL,
+  max_output_per_cycle REAL,
+  cycles_completed INTEGER DEFAULT 0,
+  total_cycles INTEGER,
+  total_output_received REAL DEFAULT 0,
+  avg_price REAL,
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'paused', 'completed', 'cancelled')),
+  next_cycle_at INTEGER,
+  started_at INTEGER NOT NULL,
+  completed_at INTEGER,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_dca_plans_wallet ON dca_plans(user_wallet);
+CREATE INDEX IF NOT EXISTS idx_dca_plans_status ON dca_plans(status);
+CREATE INDEX IF NOT EXISTS idx_dca_plans_next_cycle ON dca_plans(next_cycle_at) WHERE status = 'active';
+
+-- DCA Executions table - individual DCA cycle executions
+CREATE TABLE IF NOT EXISTS dca_executions (
+  id TEXT PRIMARY KEY,
+  plan_id TEXT NOT NULL REFERENCES dca_plans(id) ON DELETE CASCADE,
+  cycle_number INTEGER NOT NULL,
+  input_amount REAL NOT NULL,
+  output_amount REAL NOT NULL,
+  price REAL NOT NULL,
+  tx_signature TEXT,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'confirmed', 'failed')),
+  error TEXT,
+  executed_at INTEGER NOT NULL,
+  created_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_dca_executions_plan ON dca_executions(plan_id);
+CREATE INDEX IF NOT EXISTS idx_dca_executions_status ON dca_executions(status);
+
+-- ==================== Phase 5: CEX Integration Tables ====================
+
+-- Bybit Positions table
+CREATE TABLE IF NOT EXISTS bybit_positions (
+  id TEXT PRIMARY KEY,
+  user_wallet TEXT NOT NULL,
+  symbol TEXT NOT NULL,
+  side TEXT NOT NULL CHECK (side IN ('Buy', 'Sell')),
+  size REAL NOT NULL,
+  entry_price REAL NOT NULL,
+  mark_price REAL,
+  unrealised_pnl REAL DEFAULT 0,
+  realised_pnl REAL DEFAULT 0,
+  leverage INTEGER NOT NULL,
+  position_margin REAL,
+  liq_price REAL,
+  take_profit REAL,
+  stop_loss REAL,
+  trailing_stop REAL,
+  position_idx INTEGER DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'closed')),
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_bybit_positions_wallet ON bybit_positions(user_wallet);
+CREATE INDEX IF NOT EXISTS idx_bybit_positions_symbol ON bybit_positions(symbol);
+CREATE INDEX IF NOT EXISTS idx_bybit_positions_status ON bybit_positions(status);
+
+-- Bybit Orders table
+CREATE TABLE IF NOT EXISTS bybit_orders (
+  id TEXT PRIMARY KEY,
+  user_wallet TEXT NOT NULL,
+  order_id TEXT NOT NULL,
+  symbol TEXT NOT NULL,
+  side TEXT NOT NULL CHECK (side IN ('Buy', 'Sell')),
+  order_type TEXT NOT NULL,
+  qty REAL NOT NULL,
+  price REAL,
+  stop_loss REAL,
+  take_profit REAL,
+  time_in_force TEXT DEFAULT 'GTC',
+  reduce_only INTEGER DEFAULT 0,
+  close_on_trigger INTEGER DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'New',
+  cum_exec_qty REAL DEFAULT 0,
+  cum_exec_value REAL DEFAULT 0,
+  avg_price REAL,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_bybit_orders_wallet ON bybit_orders(user_wallet);
+CREATE INDEX IF NOT EXISTS idx_bybit_orders_symbol ON bybit_orders(symbol);
+CREATE INDEX IF NOT EXISTS idx_bybit_orders_status ON bybit_orders(status);
+
+-- Hyperliquid Positions table
+CREATE TABLE IF NOT EXISTS hyperliquid_positions (
+  id TEXT PRIMARY KEY,
+  user_wallet TEXT NOT NULL,
+  coin TEXT NOT NULL,
+  side TEXT NOT NULL CHECK (side IN ('long', 'short')),
+  size_coins REAL NOT NULL,
+  entry_price REAL NOT NULL,
+  position_value REAL NOT NULL,
+  unrealized_pnl REAL DEFAULT 0,
+  return_on_equity REAL DEFAULT 0,
+  liquidation_price REAL,
+  margin_used REAL,
+  max_leverage INTEGER,
+  status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'closed')),
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_hyperliquid_positions_wallet ON hyperliquid_positions(user_wallet);
+CREATE INDEX IF NOT EXISTS idx_hyperliquid_positions_coin ON hyperliquid_positions(coin);
+CREATE INDEX IF NOT EXISTS idx_hyperliquid_positions_status ON hyperliquid_positions(status);
+
+-- Hyperliquid Orders table
+CREATE TABLE IF NOT EXISTS hyperliquid_orders (
+  id TEXT PRIMARY KEY,
+  user_wallet TEXT NOT NULL,
+  oid TEXT NOT NULL,
+  coin TEXT NOT NULL,
+  side TEXT NOT NULL CHECK (side IN ('buy', 'sell')),
+  order_type TEXT NOT NULL,
+  size REAL NOT NULL,
+  limit_price REAL,
+  trigger_price REAL,
+  reduce_only INTEGER DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'open',
+  filled_size REAL DEFAULT 0,
+  avg_fill_price REAL,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_hyperliquid_orders_wallet ON hyperliquid_orders(user_wallet);
+CREATE INDEX IF NOT EXISTS idx_hyperliquid_orders_coin ON hyperliquid_orders(coin);
+CREATE INDEX IF NOT EXISTS idx_hyperliquid_orders_status ON hyperliquid_orders(status);
+
+-- ==================== Phase 6: Prediction Markets Tables ====================
+
+-- Polymarket Markets cache table
+CREATE TABLE IF NOT EXISTS polymarket_markets (
+  id TEXT PRIMARY KEY,
+  condition_id TEXT NOT NULL UNIQUE,
+  question_id TEXT,
+  question TEXT NOT NULL,
+  description TEXT,
+  slug TEXT,
+  outcome_yes_token TEXT,
+  outcome_no_token TEXT,
+  outcome_yes_price REAL,
+  outcome_no_price REAL,
+  volume TEXT,
+  liquidity TEXT,
+  end_date INTEGER,
+  active INTEGER DEFAULT 1,
+  closed INTEGER DEFAULT 0,
+  category TEXT,
+  last_updated INTEGER NOT NULL,
+  created_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_polymarket_markets_condition ON polymarket_markets(condition_id);
+CREATE INDEX IF NOT EXISTS idx_polymarket_markets_active ON polymarket_markets(active);
+
+-- Polymarket Orders table
+CREATE TABLE IF NOT EXISTS polymarket_orders (
+  id TEXT PRIMARY KEY,
+  user_wallet TEXT NOT NULL,
+  market_id TEXT NOT NULL,
+  side TEXT NOT NULL CHECK (side IN ('buy', 'sell')),
+  outcome TEXT NOT NULL CHECK (outcome IN ('yes', 'no')),
+  size REAL NOT NULL,
+  price REAL NOT NULL,
+  order_type TEXT DEFAULT 'limit',
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'open', 'filled', 'cancelled')),
+  filled_size REAL DEFAULT 0,
+  avg_fill_price REAL,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_polymarket_orders_wallet ON polymarket_orders(user_wallet);
+CREATE INDEX IF NOT EXISTS idx_polymarket_orders_market ON polymarket_orders(market_id);
+CREATE INDEX IF NOT EXISTS idx_polymarket_orders_status ON polymarket_orders(status);
+
+-- Polymarket Positions table
+CREATE TABLE IF NOT EXISTS polymarket_positions (
+  id TEXT PRIMARY KEY,
+  user_wallet TEXT NOT NULL,
+  market_id TEXT NOT NULL,
+  outcome TEXT NOT NULL CHECK (outcome IN ('yes', 'no')),
+  shares REAL NOT NULL,
+  avg_price REAL NOT NULL,
+  current_price REAL,
+  unrealized_pnl REAL DEFAULT 0,
+  realized_pnl REAL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'closed')),
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  UNIQUE(user_wallet, market_id, outcome)
+);
+
+CREATE INDEX IF NOT EXISTS idx_polymarket_positions_wallet ON polymarket_positions(user_wallet);
+CREATE INDEX IF NOT EXISTS idx_polymarket_positions_market ON polymarket_positions(market_id);
+
+-- Kalshi Markets cache table
+CREATE TABLE IF NOT EXISTS kalshi_markets (
+  id TEXT PRIMARY KEY,
+  ticker TEXT NOT NULL UNIQUE,
+  event_ticker TEXT NOT NULL,
+  title TEXT NOT NULL,
+  subtitle TEXT,
+  yes_bid REAL,
+  yes_ask REAL,
+  no_bid REAL,
+  no_ask REAL,
+  volume INTEGER,
+  open_interest INTEGER,
+  close_time INTEGER,
+  expiration_time INTEGER,
+  status TEXT DEFAULT 'active',
+  category TEXT,
+  last_updated INTEGER NOT NULL,
+  created_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_kalshi_markets_ticker ON kalshi_markets(ticker);
+CREATE INDEX IF NOT EXISTS idx_kalshi_markets_event ON kalshi_markets(event_ticker);
+CREATE INDEX IF NOT EXISTS idx_kalshi_markets_status ON kalshi_markets(status);
+
+-- Kalshi Orders table
+CREATE TABLE IF NOT EXISTS kalshi_orders (
+  id TEXT PRIMARY KEY,
+  user_wallet TEXT NOT NULL,
+  market_ticker TEXT NOT NULL,
+  side TEXT NOT NULL CHECK (side IN ('yes', 'no')),
+  action TEXT NOT NULL CHECK (action IN ('buy', 'sell')),
+  count INTEGER NOT NULL,
+  price INTEGER NOT NULL, -- in cents
+  order_type TEXT DEFAULT 'limit',
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'open', 'filled', 'cancelled')),
+  filled_count INTEGER DEFAULT 0,
+  avg_fill_price INTEGER,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_kalshi_orders_wallet ON kalshi_orders(user_wallet);
+CREATE INDEX IF NOT EXISTS idx_kalshi_orders_market ON kalshi_orders(market_ticker);
+CREATE INDEX IF NOT EXISTS idx_kalshi_orders_status ON kalshi_orders(status);
+
+-- Kalshi Positions table
+CREATE TABLE IF NOT EXISTS kalshi_positions (
+  id TEXT PRIMARY KEY,
+  user_wallet TEXT NOT NULL,
+  market_ticker TEXT NOT NULL,
+  side TEXT NOT NULL CHECK (side IN ('yes', 'no')),
+  contracts INTEGER NOT NULL,
+  avg_price INTEGER NOT NULL, -- in cents
+  current_price INTEGER,
+  unrealized_pnl REAL DEFAULT 0,
+  realized_pnl REAL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'closed')),
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  UNIQUE(user_wallet, market_ticker, side)
+);
+
+CREATE INDEX IF NOT EXISTS idx_kalshi_positions_wallet ON kalshi_positions(user_wallet);
+CREATE INDEX IF NOT EXISTS idx_kalshi_positions_market ON kalshi_positions(market_ticker);
+
+-- ==================== Phase 7: Advanced Trading Tables ====================
+
+-- Market Making Strategies table
+CREATE TABLE IF NOT EXISTS market_making_strategies (
+  id TEXT PRIMARY KEY,
+  user_wallet TEXT NOT NULL,
+  name TEXT NOT NULL,
+  description TEXT,
+  market_id TEXT NOT NULL,
+  market_type TEXT NOT NULL CHECK (market_type IN ('dex', 'cex', 'prediction')),
+  platform TEXT NOT NULL,
+  base_spread_bps INTEGER NOT NULL DEFAULT 50,
+  max_spread_bps INTEGER DEFAULT 200,
+  min_spread_bps INTEGER DEFAULT 10,
+  order_size REAL NOT NULL,
+  max_position REAL NOT NULL,
+  inventory_target REAL DEFAULT 0,
+  skew_factor REAL DEFAULT 0.5,
+  fair_value_method TEXT DEFAULT 'mid_price' CHECK (fair_value_method IN ('mid_price', 'weighted_mid', 'vwap', 'ema')),
+  volatility_multiplier REAL DEFAULT 1.0,
+  enabled INTEGER DEFAULT 1,
+  status TEXT DEFAULT 'stopped' CHECK (status IN ('running', 'stopped', 'error')),
+  total_trades INTEGER DEFAULT 0,
+  total_volume REAL DEFAULT 0,
+  total_pnl REAL DEFAULT 0,
+  current_inventory REAL DEFAULT 0,
+  last_quote_at INTEGER,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_mm_strategies_wallet ON market_making_strategies(user_wallet);
+CREATE INDEX IF NOT EXISTS idx_mm_strategies_status ON market_making_strategies(status);
+CREATE INDEX IF NOT EXISTS idx_mm_strategies_platform ON market_making_strategies(platform);
+
+-- Trading Bots table
+CREATE TABLE IF NOT EXISTS trading_bots (
+  id TEXT PRIMARY KEY,
+  user_wallet TEXT NOT NULL,
+  name TEXT NOT NULL,
+  description TEXT,
+  strategy_type TEXT NOT NULL CHECK (strategy_type IN ('grid', 'dca', 'arbitrage', 'momentum', 'mean_reversion', 'custom')),
+  config TEXT NOT NULL, -- JSON strategy configuration
+  markets TEXT NOT NULL, -- JSON array of markets to trade
+  max_position_size REAL,
+  max_daily_trades INTEGER DEFAULT 100,
+  stop_loss_percent REAL,
+  take_profit_percent REAL,
+  enabled INTEGER DEFAULT 1,
+  status TEXT DEFAULT 'stopped' CHECK (status IN ('running', 'stopped', 'paused', 'error')),
+  trades_today INTEGER DEFAULT 0,
+  total_trades INTEGER DEFAULT 0,
+  total_pnl REAL DEFAULT 0,
+  win_rate REAL DEFAULT 0,
+  last_trade_at INTEGER,
+  error TEXT,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_trading_bots_wallet ON trading_bots(user_wallet);
+CREATE INDEX IF NOT EXISTS idx_trading_bots_status ON trading_bots(status);
+CREATE INDEX IF NOT EXISTS idx_trading_bots_strategy ON trading_bots(strategy_type);
+
+-- Bot Trades table
+CREATE TABLE IF NOT EXISTS bot_trades (
+  id TEXT PRIMARY KEY,
+  bot_id TEXT NOT NULL REFERENCES trading_bots(id) ON DELETE CASCADE,
+  market_id TEXT NOT NULL,
+  side TEXT NOT NULL CHECK (side IN ('buy', 'sell')),
+  amount REAL NOT NULL,
+  price REAL NOT NULL,
+  pnl REAL,
+  fee REAL DEFAULT 0,
+  signal_reason TEXT,
+  tx_signature TEXT,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'filled', 'failed')),
+  created_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_bot_trades_bot ON bot_trades(bot_id);
+CREATE INDEX IF NOT EXISTS idx_bot_trades_status ON bot_trades(status);
+
+-- ML Signals table
+CREATE TABLE IF NOT EXISTS ml_signals (
+  id TEXT PRIMARY KEY,
+  model_id TEXT NOT NULL,
+  market_id TEXT NOT NULL,
+  signal_type TEXT NOT NULL CHECK (signal_type IN ('buy', 'sell', 'hold')),
+  confidence REAL NOT NULL,
+  features TEXT NOT NULL, -- JSON feature vector used
+  prediction_price REAL,
+  actual_price REAL,
+  prediction_horizon_ms INTEGER NOT NULL,
+  outcome TEXT CHECK (outcome IN ('correct', 'incorrect', 'pending')),
+  created_at INTEGER NOT NULL,
+  resolved_at INTEGER
+);
+
+CREATE INDEX IF NOT EXISTS idx_ml_signals_model ON ml_signals(model_id);
+CREATE INDEX IF NOT EXISTS idx_ml_signals_market ON ml_signals(market_id);
+CREATE INDEX IF NOT EXISTS idx_ml_signals_outcome ON ml_signals(outcome);
+
+-- ML Models table
+CREATE TABLE IF NOT EXISTS ml_models (
+  id TEXT PRIMARY KEY,
+  user_wallet TEXT NOT NULL,
+  name TEXT NOT NULL,
+  description TEXT,
+  model_type TEXT NOT NULL CHECK (model_type IN ('classification', 'regression', 'reinforcement')),
+  features TEXT NOT NULL, -- JSON array of feature names
+  target TEXT NOT NULL,
+  training_config TEXT, -- JSON training parameters
+  accuracy REAL,
+  precision_score REAL,
+  recall_score REAL,
+  f1_score REAL,
+  total_predictions INTEGER DEFAULT 0,
+  correct_predictions INTEGER DEFAULT 0,
+  status TEXT DEFAULT 'untrained' CHECK (status IN ('untrained', 'training', 'trained', 'deployed', 'error')),
+  last_trained_at INTEGER,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_ml_models_wallet ON ml_models(user_wallet);
+CREATE INDEX IF NOT EXISTS idx_ml_models_status ON ml_models(status);
+
+-- Kelly Criterion Calculations table
+CREATE TABLE IF NOT EXISTS kelly_calculations (
+  id TEXT PRIMARY KEY,
+  user_wallet TEXT NOT NULL,
+  market_id TEXT NOT NULL,
+  win_probability REAL NOT NULL,
+  win_loss_ratio REAL NOT NULL,
+  kelly_fraction REAL NOT NULL,
+  half_kelly REAL NOT NULL,
+  recommended_size REAL NOT NULL,
+  portfolio_value REAL NOT NULL,
+  confidence_level REAL DEFAULT 0.5,
+  calculation_method TEXT DEFAULT 'standard' CHECK (calculation_method IN ('standard', 'half', 'quarter', 'dynamic')),
+  created_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_kelly_calculations_wallet ON kelly_calculations(user_wallet);
+CREATE INDEX IF NOT EXISTS idx_kelly_calculations_market ON kelly_calculations(market_id);
+
+-- ==================== Phase 8: Communication & Infrastructure Tables ====================
+
+-- Communication Channels table
+CREATE TABLE IF NOT EXISTS communication_channels (
+  id TEXT PRIMARY KEY,
+  user_wallet TEXT NOT NULL,
+  channel_type TEXT NOT NULL CHECK (channel_type IN ('telegram', 'discord', 'slack', 'email', 'sms', 'whatsapp', 'twitch', 'matrix')),
+  channel_id TEXT NOT NULL, -- platform-specific identifier
+  channel_name TEXT,
+  credentials_encrypted TEXT,
+  config TEXT, -- JSON for channel-specific settings
+  enabled INTEGER DEFAULT 1,
+  status TEXT DEFAULT 'disconnected' CHECK (status IN ('connected', 'disconnected', 'error')),
+  last_message_at INTEGER,
+  message_count INTEGER DEFAULT 0,
+  error TEXT,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  UNIQUE(user_wallet, channel_type, channel_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_channels_wallet ON communication_channels(user_wallet);
+CREATE INDEX IF NOT EXISTS idx_channels_type ON communication_channels(channel_type);
+CREATE INDEX IF NOT EXISTS idx_channels_status ON communication_channels(status);
+
+-- Channel Messages table
+CREATE TABLE IF NOT EXISTS channel_messages (
+  id TEXT PRIMARY KEY,
+  channel_id TEXT NOT NULL REFERENCES communication_channels(id) ON DELETE CASCADE,
+  direction TEXT NOT NULL CHECK (direction IN ('inbound', 'outbound')),
+  message_type TEXT NOT NULL CHECK (message_type IN ('alert', 'trade', 'signal', 'status', 'command', 'response')),
+  content TEXT NOT NULL,
+  metadata TEXT, -- JSON for additional data
+  delivered INTEGER DEFAULT 0,
+  read_at INTEGER,
+  created_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_channel_messages_channel ON channel_messages(channel_id);
+CREATE INDEX IF NOT EXISTS idx_channel_messages_type ON channel_messages(message_type);
+
+-- Memory Store table (Agent Memory)
+CREATE TABLE IF NOT EXISTS memory_store (
+  id TEXT PRIMARY KEY,
+  user_wallet TEXT NOT NULL,
+  agent_id TEXT,
+  memory_type TEXT NOT NULL CHECK (memory_type IN ('fact', 'preference', 'trade', 'conversation', 'strategy', 'learning')),
+  key TEXT NOT NULL,
+  value TEXT NOT NULL, -- JSON
+  embedding TEXT, -- vector embedding for semantic search
+  importance REAL DEFAULT 0.5,
+  access_count INTEGER DEFAULT 0,
+  last_accessed_at INTEGER,
+  expires_at INTEGER,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_memory_wallet ON memory_store(user_wallet);
+CREATE INDEX IF NOT EXISTS idx_memory_type ON memory_store(memory_type);
+CREATE INDEX IF NOT EXISTS idx_memory_key ON memory_store(key);
+CREATE INDEX IF NOT EXISTS idx_memory_agent ON memory_store(agent_id);
+
+-- ACP Tasks table (Agent Control Protocol)
+CREATE TABLE IF NOT EXISTS acp_tasks (
+  id TEXT PRIMARY KEY,
+  agent_id TEXT NOT NULL,
+  requester_id TEXT NOT NULL,
+  task_type TEXT NOT NULL,
+  priority INTEGER DEFAULT 5,
+  payload TEXT NOT NULL, -- JSON task data
+  result TEXT, -- JSON result
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'assigned', 'running', 'completed', 'failed', 'cancelled')),
+  assigned_at INTEGER,
+  started_at INTEGER,
+  completed_at INTEGER,
+  deadline INTEGER,
+  retries INTEGER DEFAULT 0,
+  max_retries INTEGER DEFAULT 3,
+  error TEXT,
+  created_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_acp_tasks_agent ON acp_tasks(agent_id);
+CREATE INDEX IF NOT EXISTS idx_acp_tasks_status ON acp_tasks(status);
+CREATE INDEX IF NOT EXISTS idx_acp_tasks_priority ON acp_tasks(priority DESC);
+
+-- X402 Payments table
+CREATE TABLE IF NOT EXISTS x402_payments (
+  id TEXT PRIMARY KEY,
+  user_wallet TEXT NOT NULL,
+  recipient_wallet TEXT NOT NULL,
+  amount REAL NOT NULL,
+  token TEXT NOT NULL DEFAULT 'USDC',
+  payment_type TEXT NOT NULL CHECK (payment_type IN ('service', 'subscription', 'tip', 'bounty', 'agent_job')),
+  reference_id TEXT, -- reference to related entity
+  reference_type TEXT, -- type of related entity
+  memo TEXT,
+  tx_signature TEXT,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'confirmed', 'failed', 'refunded')),
+  created_at INTEGER NOT NULL,
+  confirmed_at INTEGER
+);
+
+CREATE INDEX IF NOT EXISTS idx_x402_payments_user ON x402_payments(user_wallet);
+CREATE INDEX IF NOT EXISTS idx_x402_payments_recipient ON x402_payments(recipient_wallet);
+CREATE INDEX IF NOT EXISTS idx_x402_payments_status ON x402_payments(status);

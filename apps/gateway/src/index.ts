@@ -8,6 +8,7 @@ import pino from 'pino';
 
 // Database
 import { initializeDatabase, closeDatabase } from './db/index.js';
+import { runAllSeeds } from './db/seed.js';
 
 // Routes
 import { agentsRouter } from './routes/agents.js';
@@ -37,24 +38,71 @@ import skillsRouter from './routes/skills.js';
 import survivalModeRouter from './routes/survivalMode.js';
 import evmRouter from './routes/evm.js';
 
+// Phase 1: Solana DEX integrations
+import { raydiumRouter } from './routes/raydium.js';
+import { orcaRouter } from './routes/orca.js';
+import { meteoraRouter } from './routes/meteora.js';
+import { driftRouter } from './routes/drift.js';
+import { pumpfunRouter } from './routes/pumpfun.js';
+import { dcaRouter } from './routes/dca.js';
+
+// Phase 2: CEX Perpetuals
+import { bybitRouter } from './routes/bybit.js';
+import { hyperliquidRouter } from './routes/hyperliquid.js';
+import { binanceFuturesRouter } from './routes/binanceFutures.js';
+
+// Phase 3: Prediction Markets
+import { polymarketRouter } from './routes/polymarket.js';
+import { kalshiRouter } from './routes/kalshi.js';
+
+// Phase 4: Advanced Trading Features
+import { marketMakingRouter } from './routes/marketMaking.js';
+import { botsRouter } from './routes/bots.js';
+import { mlSignalsRouter } from './routes/mlSignals.js';
+import { kellyRouter } from './routes/kelly.js';
+
+// Phase 10-11: Infrastructure
+import { channelsRouter } from './routes/channels.js';
+import { memoryRouter } from './routes/memory.js';
+import { acpRouter } from './routes/acp.js';
+import { paymentsRouter } from './routes/payments.js';
+
 // WebSocket
 import { setupWebSocket } from './websocket/index.js';
 
 // Services
 import { ServiceRegistry } from './services/registry.js';
 
+// Middleware
+import { correlationIdMiddleware } from './middleware/correlationId.js';
+
+// Config
+import { validateAndExit } from './config/validateEnv.js';
+
 config();
+
+// Validate environment variables on startup
+validateAndExit();
 
 // Initialize database
 const db = initializeDatabase();
 
+// Seed demo data if needed (for hackathon demos)
+runAllSeeds();
+
 const logger = pino({
-  transport: {
+  name: 'gateway',
+  level: process.env.LOG_LEVEL || 'info',
+  formatters: {
+    level: (label) => ({ level: label }),
+  },
+  timestamp: pino.stdTimeFunctions.isoTime,
+  transport: process.env.NODE_ENV !== 'production' ? {
     target: 'pino-pretty',
     options: {
       colorize: true,
     },
-  },
+  } : undefined,
 });
 
 const app = express();
@@ -70,10 +118,15 @@ const corsOptions = {
 app.use(helmet());
 app.use(cors(corsOptions));
 app.use(express.json());
+app.use(correlationIdMiddleware);
 
-// Request logging
+// Request logging with correlation ID
 app.use((req, res, next) => {
-  logger.info({ method: req.method, path: req.path }, 'Request');
+  logger.info({
+    method: req.method,
+    path: req.path,
+    correlationId: req.correlationId,
+  }, 'Request');
   next();
 });
 
@@ -120,6 +173,35 @@ app.use('/api/v1/skills', skillsRouter);
 app.use('/api/v1/survival-mode', survivalModeRouter);
 app.use('/api/v1/evm', evmRouter);
 
+// Phase 1: Solana DEX integrations
+app.use('/api/v1/raydium', raydiumRouter);
+app.use('/api/v1/orca', orcaRouter);
+app.use('/api/v1/meteora', meteoraRouter);
+app.use('/api/v1/drift', driftRouter);
+app.use('/api/v1/pumpfun', pumpfunRouter);
+app.use('/api/v1/dca', dcaRouter);
+
+// Phase 2: CEX Perpetuals
+app.use('/api/v1/bybit', bybitRouter);
+app.use('/api/v1/hyperliquid', hyperliquidRouter);
+app.use('/api/v1/binance', binanceFuturesRouter);
+
+// Phase 3: Prediction Markets
+app.use('/api/v1/polymarket', polymarketRouter);
+app.use('/api/v1/kalshi', kalshiRouter);
+
+// Phase 4: Advanced Trading Features
+app.use('/api/v1/market-making', marketMakingRouter);
+app.use('/api/v1/bots', botsRouter);
+app.use('/api/v1/ml-signals', mlSignalsRouter);
+app.use('/api/v1/kelly', kellyRouter);
+
+// Phase 10-11: Infrastructure
+app.use('/api/v1/channels', channelsRouter);
+app.use('/api/v1/memory', memoryRouter);
+app.use('/api/v1/acp', acpRouter);
+app.use('/api/v1/payments', paymentsRouter);
+
 // Socket.IO setup
 const io = new SocketIOServer(httpServer, {
   cors: corsOptions,
@@ -132,10 +214,17 @@ app.locals.io = io;
 
 // Error handling
 app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  logger.error({ error: err.message, stack: err.stack }, 'Unhandled error');
+  logger.error({
+    error: err.message,
+    stack: err.stack,
+    correlationId: req.correlationId,
+    path: req.path,
+    method: req.method,
+  }, 'Unhandled error');
   res.status(500).json({
     success: false,
     error: 'Internal server error',
+    correlationId: req.correlationId,
     message: process.env.NODE_ENV === 'development' ? err.message : undefined,
   });
 });
