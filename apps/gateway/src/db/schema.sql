@@ -203,3 +203,212 @@ CREATE TABLE IF NOT EXISTS integration_notifications (
 CREATE INDEX IF NOT EXISTS idx_notifications_user ON integration_notifications(user_id);
 CREATE INDEX IF NOT EXISTS idx_notifications_platform ON integration_notifications(platform);
 CREATE INDEX IF NOT EXISTS idx_notifications_event ON integration_notifications(event_type);
+
+-- ==================== New Feature Tables ====================
+
+-- Limit Orders table - for automated order execution
+CREATE TABLE IF NOT EXISTS limit_orders (
+  id TEXT PRIMARY KEY,
+  agent_id TEXT,
+  wallet_address TEXT NOT NULL,
+  input_mint TEXT NOT NULL,
+  output_mint TEXT NOT NULL,
+  input_amount REAL NOT NULL,
+  target_price REAL NOT NULL,
+  direction TEXT NOT NULL CHECK (direction IN ('above', 'below')),
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'triggered', 'executed', 'cancelled', 'expired')),
+  expires_at INTEGER,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  triggered_at INTEGER,
+  executed_at INTEGER,
+  tx_signature TEXT,
+  slippage_bps INTEGER DEFAULT 100
+);
+
+CREATE INDEX IF NOT EXISTS idx_limit_orders_wallet ON limit_orders(wallet_address);
+CREATE INDEX IF NOT EXISTS idx_limit_orders_status ON limit_orders(status);
+CREATE INDEX IF NOT EXISTS idx_limit_orders_expires ON limit_orders(expires_at) WHERE expires_at IS NOT NULL;
+
+-- Hunter Reputation table - track hunter performance and achievements
+CREATE TABLE IF NOT EXISTS hunter_reputation (
+  wallet_address TEXT PRIMARY KEY,
+  rank TEXT NOT NULL DEFAULT 'Novice' CHECK (rank IN ('Novice', 'Apprentice', 'Investigator', 'Detective', 'Expert', 'Master', 'Legend')),
+  total_earnings REAL NOT NULL DEFAULT 0,
+  bounties_completed INTEGER NOT NULL DEFAULT 0,
+  bounties_attempted INTEGER NOT NULL DEFAULT 0,
+  success_rate REAL NOT NULL DEFAULT 0,
+  avg_completion_time_hours REAL,
+  specializations TEXT DEFAULT '[]', -- JSON array of tags
+  badges TEXT DEFAULT '[]', -- JSON array of badge objects
+  streak_current INTEGER DEFAULT 0,
+  streak_best INTEGER DEFAULT 0,
+  reputation_score REAL NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_hunter_reputation_rank ON hunter_reputation(rank);
+CREATE INDEX IF NOT EXISTS idx_hunter_reputation_score ON hunter_reputation(reputation_score DESC);
+CREATE INDEX IF NOT EXISTS idx_hunter_reputation_earnings ON hunter_reputation(total_earnings DESC);
+
+-- Trade Ledger table - immutable decision audit trail
+CREATE TABLE IF NOT EXISTS trade_ledger (
+  id TEXT PRIMARY KEY,
+  agent_id TEXT,
+  wallet_address TEXT NOT NULL,
+  action TEXT NOT NULL CHECK (action IN ('buy', 'sell', 'close', 'open_position', 'close_position', 'adjust_sl', 'adjust_tp')),
+  token TEXT NOT NULL,
+  token_symbol TEXT,
+  chain TEXT NOT NULL,
+  amount REAL NOT NULL,
+  price REAL NOT NULL,
+  decision_source TEXT NOT NULL CHECK (decision_source IN ('manual', 'ai', 'signal', 'copy_trade', 'automation', 'limit_order')),
+  reasoning TEXT, -- AI reasoning or decision rationale
+  confidence REAL, -- 0-100
+  signal_ids TEXT, -- JSON array of contributing signal IDs
+  position_id TEXT,
+  tx_signature TEXT,
+  fees REAL DEFAULT 0,
+  slippage REAL DEFAULT 0,
+  pnl REAL, -- realized PnL if closing
+  created_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_ledger_wallet ON trade_ledger(wallet_address);
+CREATE INDEX IF NOT EXISTS idx_ledger_agent ON trade_ledger(agent_id);
+CREATE INDEX IF NOT EXISTS idx_ledger_token ON trade_ledger(token);
+CREATE INDEX IF NOT EXISTS idx_ledger_created ON trade_ledger(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ledger_source ON trade_ledger(decision_source);
+
+-- Copy Trading Configurations table
+CREATE TABLE IF NOT EXISTS copy_trading_configs (
+  id TEXT PRIMARY KEY,
+  user_wallet TEXT NOT NULL,
+  target_wallet TEXT NOT NULL,
+  target_label TEXT,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  allocation_percent REAL NOT NULL DEFAULT 10, -- percentage of portfolio to allocate
+  max_position_size REAL, -- max USD per trade
+  min_position_size REAL DEFAULT 10, -- min USD per trade
+  follow_sells INTEGER DEFAULT 1,
+  follow_buys INTEGER DEFAULT 1,
+  delay_seconds INTEGER DEFAULT 0, -- delay before copying
+  stop_loss_percent REAL, -- auto SL
+  take_profit_percent REAL, -- auto TP
+  max_daily_trades INTEGER DEFAULT 20,
+  trades_today INTEGER DEFAULT 0,
+  last_trade_at INTEGER,
+  total_trades INTEGER DEFAULT 0,
+  total_pnl REAL DEFAULT 0,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  UNIQUE(user_wallet, target_wallet)
+);
+
+CREATE INDEX IF NOT EXISTS idx_copy_trading_user ON copy_trading_configs(user_wallet);
+CREATE INDEX IF NOT EXISTS idx_copy_trading_target ON copy_trading_configs(target_wallet);
+CREATE INDEX IF NOT EXISTS idx_copy_trading_enabled ON copy_trading_configs(enabled);
+
+-- Copy Trading History table
+CREATE TABLE IF NOT EXISTS copy_trading_history (
+  id TEXT PRIMARY KEY,
+  config_id TEXT NOT NULL REFERENCES copy_trading_configs(id),
+  original_tx TEXT NOT NULL,
+  copied_tx TEXT,
+  target_wallet TEXT NOT NULL,
+  action TEXT NOT NULL CHECK (action IN ('buy', 'sell')),
+  token TEXT NOT NULL,
+  original_amount REAL NOT NULL,
+  copied_amount REAL,
+  original_price REAL NOT NULL,
+  copied_price REAL,
+  slippage REAL,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'executed', 'failed', 'skipped')),
+  skip_reason TEXT,
+  pnl REAL,
+  created_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_copy_history_config ON copy_trading_history(config_id);
+CREATE INDEX IF NOT EXISTS idx_copy_history_status ON copy_trading_history(status);
+
+-- Automation Rules table (Cron-like scheduling)
+CREATE TABLE IF NOT EXISTS automation_rules (
+  id TEXT PRIMARY KEY,
+  user_wallet TEXT NOT NULL,
+  name TEXT NOT NULL,
+  description TEXT,
+  rule_type TEXT NOT NULL CHECK (rule_type IN ('scheduled', 'price_trigger', 'condition', 'recurring')),
+  trigger_config TEXT NOT NULL, -- JSON: cron expression, price conditions, etc.
+  action_config TEXT NOT NULL, -- JSON: what to do when triggered
+  enabled INTEGER NOT NULL DEFAULT 1,
+  last_triggered_at INTEGER,
+  next_trigger_at INTEGER,
+  trigger_count INTEGER DEFAULT 0,
+  max_triggers INTEGER, -- null = unlimited
+  expires_at INTEGER,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_automation_user ON automation_rules(user_wallet);
+CREATE INDEX IF NOT EXISTS idx_automation_enabled ON automation_rules(enabled);
+CREATE INDEX IF NOT EXISTS idx_automation_type ON automation_rules(rule_type);
+CREATE INDEX IF NOT EXISTS idx_automation_next ON automation_rules(next_trigger_at) WHERE enabled = 1;
+
+-- Automation History table
+CREATE TABLE IF NOT EXISTS automation_history (
+  id TEXT PRIMARY KEY,
+  rule_id TEXT NOT NULL REFERENCES automation_rules(id),
+  triggered_at INTEGER NOT NULL,
+  trigger_reason TEXT,
+  action_taken TEXT NOT NULL,
+  result TEXT NOT NULL CHECK (result IN ('success', 'failed', 'skipped')),
+  result_data TEXT, -- JSON: execution details
+  error TEXT,
+  created_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_automation_history_rule ON automation_history(rule_id);
+CREATE INDEX IF NOT EXISTS idx_automation_history_triggered ON automation_history(triggered_at DESC);
+
+-- Price History table (OHLCV data)
+CREATE TABLE IF NOT EXISTS price_history (
+  id TEXT PRIMARY KEY,
+  token_mint TEXT NOT NULL,
+  interval TEXT NOT NULL CHECK (interval IN ('1m', '5m', '15m', '1h', '4h', '1d')),
+  timestamp INTEGER NOT NULL,
+  open REAL NOT NULL,
+  high REAL NOT NULL,
+  low REAL NOT NULL,
+  close REAL NOT NULL,
+  volume REAL NOT NULL DEFAULT 0,
+  UNIQUE(token_mint, interval, timestamp)
+);
+
+CREATE INDEX IF NOT EXISTS idx_price_history_token ON price_history(token_mint);
+CREATE INDEX IF NOT EXISTS idx_price_history_interval ON price_history(interval);
+CREATE INDEX IF NOT EXISTS idx_price_history_timestamp ON price_history(timestamp DESC);
+
+-- Migration Detection table
+CREATE TABLE IF NOT EXISTS token_migrations (
+  id TEXT PRIMARY KEY,
+  old_mint TEXT NOT NULL,
+  new_mint TEXT NOT NULL,
+  old_symbol TEXT,
+  new_symbol TEXT,
+  migration_type TEXT NOT NULL CHECK (migration_type IN ('pump_to_raydium', 'bonding_curve', 'upgrade', 'rebrand', 'other')),
+  detected_at INTEGER NOT NULL,
+  ranking_score REAL DEFAULT 0,
+  god_wallet_count INTEGER DEFAULT 0,
+  volume_24h REAL DEFAULT 0,
+  market_cap REAL DEFAULT 0,
+  metadata TEXT, -- JSON for additional data
+  created_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_migrations_detected ON token_migrations(detected_at DESC);
+CREATE INDEX IF NOT EXISTS idx_migrations_ranking ON token_migrations(ranking_score DESC);
+CREATE INDEX IF NOT EXISTS idx_migrations_old_mint ON token_migrations(old_mint);
+CREATE INDEX IF NOT EXISTS idx_migrations_new_mint ON token_migrations(new_mint);

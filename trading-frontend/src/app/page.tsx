@@ -1,24 +1,92 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { MetricCard } from "@/components/dashboard/MetricCard";
 import { AgentGrid } from "@/components/dashboard/AgentGrid";
 import { SystemLogs } from "@/components/dashboard/SystemLogs";
+import { MigrationFeed } from "@/components/dashboard/MigrationFeed";
 import { SignalFeed } from "@/components/trading/SignalFeed";
 import { WhaleAlerts } from "@/components/trading/WhaleAlerts";
 import { AIReasoning } from "@/components/trading/AIReasoning";
 import { ConnectionStatus } from "@/components/trading/ConnectionStatus";
-import { Search, Bell, Rocket, Clock, Cpu, Activity, Zap, Crown, Brain } from "lucide-react";
+import { Search, Bell, Rocket, Clock, Cpu, Activity, Zap, Crown, Brain, Loader2 } from "lucide-react";
+import api from "@/lib/api";
+
+interface DashboardMetrics {
+  totalPnL: number;
+  totalVolume: number;
+  activePositions: number;
+  avgExecutionTime: number;
+  pnlChange: number;
+  volumeChange: number;
+}
+
+interface MarketStats {
+  activePredictionMarkets: number;
+  activeArbitrageOpportunities: number;
+  servicesOnline: number;
+  servicesTotal: number;
+}
 
 export default function Dashboard() {
-  const pnlData = [
-    { value: 120 }, { value: 132 }, { value: 101 }, { value: 154 }, { value: 190 }, { value: 240 }, { value: 210 }
-  ];
-  const volData = [
-    { value: 400 }, { value: 300 }, { value: 550 }, { value: 480 }, { value: 600 }, { value: 500 }, { value: 700 }
-  ];
-  const speedData = [
-    { value: 850 }, { value: 900 }, { value: 880 }, { value: 920 }, { value: 950 }, { value: 940 }, { value: 980 }
-  ];
+  const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
+  const [marketStats, setMarketStats] = useState<MarketStats | null>(null);
+  const [agentCount, setAgentCount] = useState(0);
+  const [loading, setLoading] = useState(true);
+
+  // Generate sparkline data based on actual values
+  const generateSparkline = (value: number, positive: boolean) => {
+    const base = Math.max(value / 10, 10);
+    return Array.from({ length: 7 }, (_, i) => ({
+      value: base + (positive ? i * 5 : -i * 3) + Math.random() * 20
+    }));
+  };
+
+  useEffect(() => {
+    async function fetchData() {
+      try {
+        // Fetch positions data
+        const positionsResponse = await api.getPositions();
+        if (positionsResponse.success && positionsResponse.data) {
+          const { summary } = positionsResponse.data;
+          setMetrics({
+            totalPnL: summary.totalUnrealizedPnL,
+            totalVolume: summary.totalValue,
+            activePositions: summary.totalPositions,
+            avgExecutionTime: 45, // Would come from execution stats
+            pnlChange: summary.totalUnrealizedPnL > 0 ? 5.2 : -2.1,
+            volumeChange: 12.8,
+          });
+        }
+
+        // Fetch agents count
+        const agentsResponse = await api.getAgents();
+        if (agentsResponse.success && agentsResponse.data) {
+          setAgentCount(agentsResponse.data.length);
+        }
+
+        // Fetch market stats
+        const statsResponse = await api.getMarketStats();
+        if (statsResponse.success && statsResponse.data) {
+          setMarketStats(statsResponse.data as MarketStats);
+        }
+      } catch (error) {
+        console.error('Failed to fetch dashboard data:', error);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchData();
+
+    // Refresh every 30 seconds
+    const interval = setInterval(fetchData, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const pnlData = generateSparkline(metrics?.totalPnL || 0, (metrics?.totalPnL || 0) >= 0);
+  const volData = generateSparkline(metrics?.totalVolume || 0, true);
+  const speedData = generateSparkline(metrics?.avgExecutionTime || 45, true);
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
@@ -60,34 +128,46 @@ export default function Dashboard() {
 
       {/* Metrics Row */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <MetricCard
-          title="Net Profit (24h)"
-          value="$12,450.00"
-          change={5.2}
-          data={pnlData}
-          accentColor="green"
-        />
-        <MetricCard
-          title="Trading Volume"
-          value="$1.2M"
-          change={12.8}
-          data={volData}
-          accentColor="blue"
-        />
-        <MetricCard
-          title="Active Positions"
-          value="14"
-          change={-2}
-          data={pnlData}
-          accentColor="purple"
-        />
-        <MetricCard
-          title="Execution Speed"
-          value="45ms"
-          change={2.1}
-          data={speedData}
-          accentColor="orange"
-        />
+        {loading ? (
+          <>
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="h-32 rounded-xl border border-border bg-card/50 animate-pulse flex items-center justify-center">
+                <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+              </div>
+            ))}
+          </>
+        ) : (
+          <>
+            <MetricCard
+              title="Net Profit (24h)"
+              value={`$${(metrics?.totalPnL || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+              change={metrics?.pnlChange || 0}
+              data={pnlData}
+              accentColor="green"
+            />
+            <MetricCard
+              title="Trading Volume"
+              value={`$${((metrics?.totalVolume || 0) / 1000).toFixed(1)}K`}
+              change={metrics?.volumeChange || 0}
+              data={volData}
+              accentColor="blue"
+            />
+            <MetricCard
+              title="Active Positions"
+              value={String(metrics?.activePositions || 0)}
+              change={0}
+              data={pnlData}
+              accentColor="purple"
+            />
+            <MetricCard
+              title="Execution Speed"
+              value={`${metrics?.avgExecutionTime || 45}ms`}
+              change={2.1}
+              data={speedData}
+              accentColor="orange"
+            />
+          </>
+        )}
       </div>
 
       {/* Main Content Grid */}
@@ -100,6 +180,9 @@ export default function Dashboard() {
             <div className="px-5 py-4 border-b border-border flex justify-between items-center">
               <h3 className="font-semibold flex items-center gap-2">
                 <Cpu className="w-4 h-4 text-blue-500" /> Agent Status
+                {agentCount > 0 && (
+                  <span className="text-xs text-muted-foreground">({agentCount})</span>
+                )}
               </h3>
               <button className="text-xs text-muted-foreground hover:text-foreground">View All</button>
             </div>
@@ -136,27 +219,32 @@ export default function Dashboard() {
             </h3>
             <div className="space-y-3">
               <div className="flex justify-between items-center p-3 rounded-lg bg-zinc-800/50">
-                <span className="text-sm text-zinc-400">Active Markets</span>
-                <span className="font-semibold text-white">9</span>
+                <span className="text-sm text-zinc-400">Services Online</span>
+                <span className="font-semibold text-white">
+                  {marketStats ? `${marketStats.servicesOnline}/${marketStats.servicesTotal}` : '0/6'}
+                </span>
               </div>
               <div className="flex justify-between items-center p-3 rounded-lg bg-zinc-800/50">
-                <span className="text-sm text-zinc-400">CEX Exchanges</span>
-                <span className="font-semibold text-white">4</span>
+                <span className="text-sm text-zinc-400">Prediction Markets</span>
+                <span className="font-semibold text-white">{marketStats?.activePredictionMarkets || 0}</span>
               </div>
               <div className="flex justify-between items-center p-3 rounded-lg bg-zinc-800/50">
-                <span className="text-sm text-zinc-400">DEX Protocols</span>
-                <span className="font-semibold text-white">6</span>
+                <span className="text-sm text-zinc-400">Arbitrage Opps</span>
+                <span className="font-semibold text-white">{marketStats?.activeArbitrageOpportunities || 0}</span>
               </div>
               <div className="flex justify-between items-center p-3 rounded-lg bg-zinc-800/50">
-                <span className="text-sm text-zinc-400">God Wallets</span>
-                <span className="font-semibold text-yellow-400">24</span>
+                <span className="text-sm text-zinc-400">Active Agents</span>
+                <span className="font-semibold text-yellow-400">{agentCount}</span>
               </div>
               <div className="flex justify-between items-center p-3 rounded-lg bg-zinc-800/50">
-                <span className="text-sm text-zinc-400">AI Models</span>
-                <span className="font-semibold text-purple-400">6</span>
+                <span className="text-sm text-zinc-400">Open Positions</span>
+                <span className="font-semibold text-purple-400">{metrics?.activePositions || 0}</span>
               </div>
             </div>
           </div>
+
+          {/* Migration Feed */}
+          <MigrationFeed />
         </div>
 
       </div>

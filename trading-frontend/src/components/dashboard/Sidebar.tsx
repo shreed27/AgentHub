@@ -1,6 +1,6 @@
 "use client";
 
-import { LayoutDashboard, Users, Activity, Settings, Terminal, Wallet, LogOut, Globe, Moon, Sun, Target } from "lucide-react";
+import { LayoutDashboard, Users, Activity, Settings, Terminal, Wallet, LogOut, Globe, Target, Trophy, Copy, Zap, BookOpen, Rocket, Crosshair } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
@@ -12,7 +12,13 @@ const menuItems = [
     { icon: Globe, label: "Market Intel", href: "/market-intelligence" },
     { icon: Users, label: "Agents", href: "/agents" },
     { icon: Activity, label: "Live Execution", href: "/execution" },
+    { icon: Crosshair, label: "Limit Orders", href: "/limit-orders" },
     { icon: Target, label: "Bounties", href: "/bounties" },
+    { icon: Trophy, label: "Leaderboard", href: "/leaderboard" },
+    { icon: Copy, label: "Copy Trading", href: "/copy-trading" },
+    { icon: Zap, label: "Automation", href: "/automation" },
+    { icon: BookOpen, label: "Trade Ledger", href: "/trade-ledger" },
+    { icon: Rocket, label: "Migrations", href: "/migrations" },
     { icon: Terminal, label: "Logs", href: "/logs" },
     { icon: Wallet, label: "Portfolio", href: "/portfolio" },
     { icon: Settings, label: "Settings", href: "/settings" },

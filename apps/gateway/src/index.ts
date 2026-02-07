@@ -18,6 +18,13 @@ import { marketRouter } from './routes/market.js';
 import { healthRouter } from './routes/health.js';
 import bountiesRouter from './routes/bounties.js';
 import { integrationsRouter } from './routes/integrations.js';
+import { limitOrdersRouter } from './routes/limitOrders.js';
+import { leaderboardRouter } from './routes/leaderboard.js';
+import { tradeLedgerRouter } from './routes/tradeLedger.js';
+import { copyTradingRouter } from './routes/copyTrading.js';
+import { automationRouter } from './routes/automation.js';
+import { priceHistoryRouter } from './routes/priceHistory.js';
+import { migrationsRouter } from './routes/migrations.js';
 
 // WebSocket
 import { setupWebSocket } from './websocket/index.js';
@@ -83,6 +90,13 @@ app.use('/api/v1/portfolio', portfolioRouter);
 app.use('/api/v1/market', marketRouter);
 app.use('/api/v1/bounties', bountiesRouter);
 app.use('/api/v1/integrations', integrationsRouter);
+app.use('/api/v1/limit-orders', limitOrdersRouter);
+app.use('/api/v1/leaderboard', leaderboardRouter);
+app.use('/api/v1/trade-ledger', tradeLedgerRouter);
+app.use('/api/v1/copy-trading', copyTradingRouter);
+app.use('/api/v1/automation', automationRouter);
+app.use('/api/v1/prices', priceHistoryRouter);
+app.use('/api/v1/migrations', migrationsRouter);
 
 // Socket.IO setup
 const io = new SocketIOServer(httpServer, {

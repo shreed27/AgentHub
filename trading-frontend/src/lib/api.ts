@@ -535,6 +535,511 @@ class ApiClient {
   async updateNotificationSettings(settings: Record<string, Record<string, { enabled: boolean; config?: Record<string, unknown> }>>) {
     return this.request<{ message: string }>('PUT', '/api/v1/integrations/notifications/settings', { settings });
   }
+
+  // ==================== Limit Orders ====================
+
+  async getLimitOrders(walletAddress: string, status?: string) {
+    const params = new URLSearchParams({ walletAddress });
+    if (status) params.set('status', status);
+    return this.request<{
+      data: Array<{
+        id: string;
+        walletAddress: string;
+        inputMint: string;
+        outputMint: string;
+        inputAmount: number;
+        targetPrice: number;
+        direction: 'above' | 'below';
+        status: string;
+        expiresAt?: number;
+        createdAt: number;
+        slippageBps: number;
+      }>;
+      total: number;
+    }>('GET', `/api/v1/limit-orders?${params}`);
+  }
+
+  async createLimitOrder(params: {
+    walletAddress: string;
+    inputMint: string;
+    outputMint: string;
+    inputAmount: number;
+    targetPrice: number;
+    direction: 'above' | 'below';
+    expiresAt?: number;
+    slippageBps?: number;
+  }) {
+    return this.request<{ data: unknown }>('POST', '/api/v1/limit-orders', params);
+  }
+
+  async cancelLimitOrder(orderId: string) {
+    return this.request<{ message: string }>('DELETE', `/api/v1/limit-orders/${orderId}`);
+  }
+
+  async getLimitOrderStats(walletAddress: string) {
+    return this.request<{
+      data: {
+        active: number;
+        executed: number;
+        cancelled: number;
+        expired: number;
+        totalVolume: number;
+      };
+    }>('GET', `/api/v1/limit-orders/stats?walletAddress=${walletAddress}`);
+  }
+
+  // ==================== Leaderboard & Reputation ====================
+
+  async getLeaderboard(params?: { sortBy?: string; limit?: number; offset?: number }) {
+    const queryParams = params
+      ? '?' + new URLSearchParams(params as Record<string, string>).toString()
+      : '';
+    return this.request<{
+      data: {
+        hunters: Array<{
+          rank: number;
+          walletAddress: string;
+          rank: string;
+          totalEarnings: number;
+          bountiesCompleted: number;
+          successRate: number;
+          reputationScore: number;
+          badges: Array<{ id: string; name: string; icon: string; rarity: string }>;
+        }>;
+        total: number;
+      };
+    }>('GET', `/api/v1/leaderboard${queryParams}`);
+  }
+
+  async getHunterReputation(walletAddress: string) {
+    return this.request<{
+      data: {
+        walletAddress: string;
+        rank: string;
+        totalEarnings: number;
+        bountiesCompleted: number;
+        bountiesAttempted: number;
+        successRate: number;
+        specializations: string[];
+        badges: Array<{ id: string; name: string; icon: string; rarity: string; earnedAt: number }>;
+        streakCurrent: number;
+        streakBest: number;
+        reputationScore: number;
+        nextRank?: { name: string; requiredScore: number; pointsNeeded: number; progress: number };
+      };
+    }>('GET', `/api/v1/leaderboard/reputation/${walletAddress}`);
+  }
+
+  async getBadges() {
+    return this.request<{
+      data: Array<{
+        id: string;
+        name: string;
+        description: string;
+        icon: string;
+        rarity: string;
+      }>;
+    }>('GET', '/api/v1/leaderboard/badges');
+  }
+
+  async getRanks() {
+    return this.request<{
+      data: Array<{
+        name: string;
+        minScore: number;
+        icon: string;
+      }>;
+    }>('GET', '/api/v1/leaderboard/ranks');
+  }
+
+  // ==================== Trade Ledger ====================
+
+  async getTradeLedger(params: {
+    walletAddress?: string;
+    agentId?: string;
+    token?: string;
+    action?: string;
+    decisionSource?: string;
+    limit?: number;
+    offset?: number;
+  }) {
+    const queryParams = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined) queryParams.set(key, String(value));
+    });
+    return this.request<{
+      data: {
+        entries: Array<{
+          id: string;
+          walletAddress: string;
+          action: string;
+          token: string;
+          tokenSymbol?: string;
+          chain: string;
+          amount: number;
+          price: number;
+          decisionSource: string;
+          reasoning?: string;
+          confidence?: number;
+          txSignature?: string;
+          fees: number;
+          slippage: number;
+          pnl?: number;
+          createdAt: number;
+        }>;
+        total: number;
+      };
+    }>('GET', `/api/v1/trade-ledger?${queryParams}`);
+  }
+
+  async getTradeLedgerStats(walletAddress: string, startTime?: number) {
+    const params = new URLSearchParams({ walletAddress });
+    if (startTime) params.set('startTime', String(startTime));
+    return this.request<{
+      data: {
+        totalTrades: number;
+        totalVolume: number;
+        totalFees: number;
+        totalPnl: number;
+        winCount: number;
+        lossCount: number;
+        winRate: number;
+        avgTradeSize: number;
+        bySource: Record<string, number>;
+        byAction: Record<string, number>;
+      };
+    }>('GET', `/api/v1/trade-ledger/stats?${params}`);
+  }
+
+  async getRecentDecisions(walletAddress: string, limit?: number) {
+    const params = new URLSearchParams({ walletAddress });
+    if (limit) params.set('limit', String(limit));
+    return this.request<{
+      data: Array<{
+        id: string;
+        action: string;
+        token: string;
+        decisionSource: string;
+        reasoning: string;
+        confidence: number;
+        createdAt: number;
+      }>;
+    }>('GET', `/api/v1/trade-ledger/decisions?${params}`);
+  }
+
+  async getConfidenceCalibration(walletAddress: string) {
+    return this.request<{
+      data: {
+        ranges: Array<{ min: number; max: number; count: number; winRate: number }>;
+        avgConfidence: number;
+        calibrationScore: number;
+      };
+    }>('GET', `/api/v1/trade-ledger/calibration?walletAddress=${walletAddress}`);
+  }
+
+  // ==================== Copy Trading ====================
+
+  async getCopyTradingConfigs(userWallet: string) {
+    return this.request<{
+      data: Array<{
+        id: string;
+        userWallet: string;
+        targetWallet: string;
+        targetLabel?: string;
+        enabled: boolean;
+        allocationPercent: number;
+        maxPositionSize?: number;
+        stopLossPercent?: number;
+        takeProfitPercent?: number;
+        totalTrades: number;
+        totalPnl: number;
+      }>;
+    }>('GET', `/api/v1/copy-trading/configs?userWallet=${userWallet}`);
+  }
+
+  async createCopyTradingConfig(params: {
+    userWallet: string;
+    targetWallet: string;
+    targetLabel?: string;
+    allocationPercent?: number;
+    maxPositionSize?: number;
+    stopLossPercent?: number;
+    takeProfitPercent?: number;
+  }) {
+    return this.request<{ data: unknown }>('POST', '/api/v1/copy-trading/configs', params);
+  }
+
+  async updateCopyTradingConfig(configId: string, params: Record<string, unknown>) {
+    return this.request<{ data: unknown }>('PUT', `/api/v1/copy-trading/configs/${configId}`, params);
+  }
+
+  async deleteCopyTradingConfig(configId: string) {
+    return this.request<{ message: string }>('DELETE', `/api/v1/copy-trading/configs/${configId}`);
+  }
+
+  async toggleCopyTradingConfig(configId: string, enabled: boolean) {
+    return this.request<{ data: unknown }>('POST', `/api/v1/copy-trading/configs/${configId}/toggle`, { enabled });
+  }
+
+  async getCopyTradingHistory(params: { userWallet?: string; configId?: string; limit?: number }) {
+    const queryParams = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined) queryParams.set(key, String(value));
+    });
+    return this.request<{
+      data: Array<{
+        id: string;
+        configId: string;
+        originalTx: string;
+        copiedTx?: string;
+        targetWallet: string;
+        action: string;
+        token: string;
+        originalAmount: number;
+        copiedAmount?: number;
+        status: string;
+        pnl?: number;
+        createdAt: number;
+      }>;
+    }>('GET', `/api/v1/copy-trading/history?${queryParams}`);
+  }
+
+  async getCopyTradingStats(userWallet: string) {
+    return this.request<{
+      data: {
+        totalConfigs: number;
+        activeConfigs: number;
+        totalCopiedTrades: number;
+        successfulTrades: number;
+        totalPnl: number;
+        successRate: number;
+        topPerformingTarget?: { wallet: string; pnl: number };
+      };
+    }>('GET', `/api/v1/copy-trading/stats?userWallet=${userWallet}`);
+  }
+
+  // ==================== Automation ====================
+
+  async getAutomationRules(userWallet: string) {
+    return this.request<{
+      data: Array<{
+        id: string;
+        name: string;
+        description?: string;
+        ruleType: string;
+        triggerConfig: Record<string, unknown>;
+        actionConfig: Record<string, unknown>;
+        enabled: boolean;
+        lastTriggeredAt?: number;
+        nextTriggerAt?: number;
+        triggerCount: number;
+      }>;
+    }>('GET', `/api/v1/automation/rules?userWallet=${userWallet}`);
+  }
+
+  async createAutomationRule(params: {
+    userWallet: string;
+    name: string;
+    description?: string;
+    ruleType: string;
+    triggerConfig: Record<string, unknown>;
+    actionConfig: Record<string, unknown>;
+    maxTriggers?: number;
+    expiresAt?: number;
+  }) {
+    return this.request<{ data: unknown }>('POST', '/api/v1/automation/rules', params);
+  }
+
+  async updateAutomationRule(ruleId: string, params: Record<string, unknown>) {
+    return this.request<{ data: unknown }>('PUT', `/api/v1/automation/rules/${ruleId}`, params);
+  }
+
+  async deleteAutomationRule(ruleId: string) {
+    return this.request<{ message: string }>('DELETE', `/api/v1/automation/rules/${ruleId}`);
+  }
+
+  async toggleAutomationRule(ruleId: string, enabled: boolean) {
+    return this.request<{ data: unknown }>('POST', `/api/v1/automation/rules/${ruleId}/toggle`, { enabled });
+  }
+
+  async getAutomationHistory(params: { userWallet?: string; ruleId?: string; limit?: number }) {
+    const queryParams = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined) queryParams.set(key, String(value));
+    });
+    return this.request<{
+      data: Array<{
+        id: string;
+        ruleId: string;
+        triggeredAt: number;
+        actionTaken: string;
+        result: string;
+        error?: string;
+      }>;
+    }>('GET', `/api/v1/automation/history?${queryParams}`);
+  }
+
+  async getAutomationStats(userWallet: string) {
+    return this.request<{
+      data: {
+        totalRules: number;
+        activeRules: number;
+        totalTriggers: number;
+        successfulTriggers: number;
+        failedTriggers: number;
+        byType: Record<string, number>;
+      };
+    }>('GET', `/api/v1/automation/stats?userWallet=${userWallet}`);
+  }
+
+  // ==================== Price History ====================
+
+  async getPriceHistory(token: string, params?: { interval?: string; startTime?: number; endTime?: number; limit?: number }) {
+    const queryParams = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined) queryParams.set(key, String(value));
+      });
+    }
+    return this.request<{
+      data: {
+        token: string;
+        interval: string;
+        candles: Array<{
+          timestamp: number;
+          open: number;
+          high: number;
+          low: number;
+          close: number;
+          volume: number;
+        }>;
+        priceChange: number;
+        priceChangePercent: number;
+      };
+    }>('GET', `/api/v1/prices/${token}/history?${queryParams}`);
+  }
+
+  async getPriceStats(token: string, params?: { interval?: string; period?: string }) {
+    const queryParams = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined) queryParams.set(key, String(value));
+      });
+    }
+    return this.request<{
+      data: {
+        token: string;
+        high: number;
+        low: number;
+        open: number;
+        close: number;
+        avgPrice: number;
+        totalVolume: number;
+        priceChange: number;
+        priceChangePercent: number;
+        volatility: number;
+      };
+    }>('GET', `/api/v1/prices/${token}/stats?${queryParams}`);
+  }
+
+  async getLatestPrice(token: string) {
+    return this.request<{
+      data: {
+        token: string;
+        price: number;
+        timestamp: number;
+        high24h: number;
+        low24h: number;
+        volume: number;
+      };
+    }>('GET', `/api/v1/prices/${token}/latest`);
+  }
+
+  async getBatchPrices(tokens: string[]) {
+    return this.request<{
+      data: Array<{
+        token: string;
+        price: number | null;
+        timestamp: number | null;
+        available: boolean;
+      }>;
+    }>('GET', `/api/v1/prices/batch?tokens=${tokens.join(',')}`);
+  }
+
+  // ==================== Migrations ====================
+
+  async getMigrations(params?: { type?: string; minRankingScore?: number; minGodWalletCount?: number; limit?: number }) {
+    const queryParams = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined) queryParams.set(key, String(value));
+      });
+    }
+    return this.request<{
+      data: {
+        migrations: Array<{
+          id: string;
+          oldMint: string;
+          newMint: string;
+          oldSymbol?: string;
+          newSymbol?: string;
+          migrationType: string;
+          detectedAt: number;
+          rankingScore: number;
+          godWalletCount: number;
+          volume24h: number;
+          marketCap: number;
+        }>;
+        total: number;
+      };
+    }>('GET', `/api/v1/migrations?${queryParams}`);
+  }
+
+  async getTopMigrations(limit?: number) {
+    const params = limit ? `?limit=${limit}` : '';
+    return this.request<{
+      data: Array<{
+        id: string;
+        oldMint: string;
+        newMint: string;
+        newSymbol?: string;
+        migrationType: string;
+        rankingScore: number;
+        godWalletCount: number;
+      }>;
+    }>('GET', `/api/v1/migrations/top${params}`);
+  }
+
+  async getMigrationsByGodWalletActivity(params?: { minWalletCount?: number; limit?: number }) {
+    const queryParams = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined) queryParams.set(key, String(value));
+      });
+    }
+    return this.request<{
+      data: Array<{
+        id: string;
+        newSymbol?: string;
+        migrationType: string;
+        godWalletCount: number;
+        rankingScore: number;
+      }>;
+    }>('GET', `/api/v1/migrations/god-wallet-activity?${queryParams}`);
+  }
+
+  async getMigrationStats() {
+    return this.request<{
+      data: {
+        total: number;
+        last24h: number;
+        last7d: number;
+        byType: Record<string, number>;
+        avgRankingScore: number;
+        avgGodWalletCount: number;
+      };
+    }>('GET', '/api/v1/migrations/stats');
+  }
 }
 
 export const api = new ApiClient(GATEWAY_URL);
