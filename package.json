@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "description": "DAIN Super Trading Platform - Unified autonomous trading with AI agents",
   "private": true,
+  "overrides": {
+    "@coral-xyz/anchor": "^0.32.1"
+  },
   "workspaces": [
     "trading-orchestrator",
     "trading-frontend",
@@ -23,11 +26,13 @@
     "build": "npm run build --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
+    "test:integration": "vitest run tests/integration/*.test.ts",
     "start:all": "concurrently -n gateway,orchestrator,frontend,cloddsbot,agent-dex -c blue,green,yellow,magenta,cyan \"npm run dev:gateway\" \"npm run dev:orchestrator\" \"npm run dev:frontend\" \"npm run dev:cloddsbot\" \"npm run dev:agent-dex\""
   },
   "devDependencies": {
     "concurrently": "^8.2.2",
-    "typescript": "^5.3.3"
+    "typescript": "^5.3.3",
+    "vitest": "^4.0.18"
   },
   "engines": {
     "node": ">=20.0.0"

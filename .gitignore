@@ -2,10 +2,28 @@
 node_modules/
 .pnpm-store/
 
-# Environment files
+# Environment files - NEVER commit secrets
 .env
+.env.*
 .env.local
 .env.*.local
+*.env
+**/.env
+**/.env.*
+**/.env.local
+!.env.example
+!**/.env.example
+!.env.local.example
+!**/.env.local.example
+
+# Explicitly exclude these paths (in case already tracked)
+apps/gateway/.env
+trading-orchestrator/.env
+trading-frontend/.env.local
+CloddsBot-main/.env
+agent-dex-main/api/.env
+openclaw-sidex-kit-main/.env
+clawdnet-main/.env
 
 # Build outputs
 dist/

@@ -1,8 +1,81 @@
-# Super Trading Platform (DAIN)
+# DAIN - Decentralized Autonomous Intelligence Network
 
-> Decentralized Autonomous Intelligence Network - A unified autonomous trading platform combining 7 projects into one super app.
+> **The First Unified Platform for AI-Powered Trading Agents**
 
-## Architecture Overview
+---
+
+## The Problem
+
+Crypto traders juggle **10+ fragmented platforms** daily:
+- DEXs (Jupiter, Uniswap) for spot trading
+- CEXs (Binance, Bybit) for perpetuals
+- Prediction markets (Polymarket, Kalshi) for event trading
+- Analytics tools (Birdeye, DeFiLlama) for signals
+- Different APIs, UIs, and risk models for each
+
+**AI agents can't operate efficiently** across this fragmentation. They need unified access, consistent risk management, and coordinated execution.
+
+## The Solution
+
+DAIN unifies **7 trading projects** into one super platform where AI agents can:
+
+- **Trade across 9 prediction markets** with unified position management
+- **Execute on Solana + 5 EVM chains + 4 CEXs** through a single API
+- **Follow elite "God Wallets"** with automatic trade mirroring
+- **Manage risk with Survival Mode** - adaptive limits based on P&L
+- **Communicate via A2A Protocol** - agents pay each other with X402
+
+---
+
+## Quick Start
+
+### Option 1: Docker (Recommended for Judges)
+
+```bash
+docker-compose up
+# Frontend: http://localhost:3000
+# API:      http://localhost:4000
+```
+
+### Option 2: Local Development
+
+```bash
+# Install dependencies
+npm install
+
+# Run demo (shows all features)
+./scripts/demo.sh
+
+# Or start manually:
+npm run dev  # Starts gateway + orchestrator + frontend
+```
+
+---
+
+## Key Features
+
+### 103 AI Skills
+From basic swaps to complex multi-leg arbitrage, powered by 6 LLMs (Claude, GPT-4, Gemini, Groq).
+
+### God Wallet Tracking
+24 elite traders monitored in real-time. Automatic copy trading with configurable thresholds.
+
+### Survival Mode (Unique)
+Adaptive risk management based on portfolio P&L:
+- **SURVIVAL** (0% to -15%): Normal trading
+- **DEFENSIVE** (-15% to -50%): Positions reduced 50%
+- **CRITICAL** (< -50%): Full hibernation
+- **GROWTH** (>= +20%): Aggressive mode unlocked
+
+### Jito MEV Protection
+All Solana trades bundled via Jito to prevent front-running.
+
+### A2A Protocol
+Agent-to-agent communication with X402 USDC payments on Base.
+
+---
+
+## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -39,246 +112,147 @@
 └─────────────────────────────────────────────────────────────┘
 ```
 
+---
+
 ## Integrated Projects
 
-| Project | Purpose | Features |
-|---------|---------|----------|
-| **CloddsBot** | Execution Engine | 22 channels, 9 prediction markets, 4 CEX perpetuals, risk engine |
-| **AgentDEX** | Solana DEX API | Jupiter V6 swaps, agent registration, limit orders |
-| **trading-frontend** | Unified Dashboard | God wallets, AI analysis, smart trading, bounties (features extracted from Opus-X & OSINT Market) |
+| Project | Purpose | Key Features |
+|---------|---------|--------------|
+| **CloddsBot** | Execution Engine | 103 skills, 9 prediction markets, 4 CEX perpetuals, risk engine |
+| **AgentDEX** | Solana DEX API | Jupiter V6, agent registration, limit orders |
 | **OpenClaw** | Multi-Exchange | Survival mode, X402 payments, trading pipelines |
-| **ClawdNet** | A2A Protocol | Agent discovery, X402 USDC payments, reputation |
-| **AgentHub** | Architecture | Multi-agent coordination patterns |
+| **ClawdNet** | A2A Protocol | Agent discovery, USDC payments, reputation |
+| **Opus-X** | Signal Router | God wallets, AI analysis, smart trading |
+| **OSINT Market** | Intelligence | Bounty marketplace, escrow, wallet auth |
 
-> **Note**: Features from Opus-X (god wallets, AI entry analysis, smart trading types) and OSINT Market (bounties, reputation, wallet auth, escrow) have been extracted and integrated into `trading-frontend` and `apps/gateway`.
+---
 
-## Quick Start
+## Supported Platforms
 
-### 1. Install Dependencies
+### DEXs
+- **Solana**: Jupiter V6, Raydium, Orca, Meteora
+- **EVM**: Uniswap, 1inch, Wormhole bridges
 
-```bash
-npm install
-```
+### CEXs (Perpetuals)
+- Binance (up to 125x)
+- Bybit (up to 100x)
+- Hyperliquid
+- Drift Labs
 
-### 2. Configure Environment
+### Prediction Markets
+- Polymarket
+- Kalshi
+- Manifold
+- Predict.fun
+- Betfair
+- PredictIt
+- Metaculus
+- Smarkets
+- And more...
 
-```bash
-cp .env.example .env
-# Edit .env with your API keys
-```
+---
 
-### 3. Start Services
+## API Reference
 
-```bash
-# Start all services
-./scripts/start-all.sh
-
-# Or start individually:
-npm run dev:gateway      # Gateway API (port 4000)
-npm run dev:orchestrator # Orchestrator (port 4001)
-npm run dev:frontend     # Frontend (port 5000)
-```
-
-### 4. Open Dashboard
-
-Visit http://localhost:5000
-
-## Project Structure
+### REST Endpoints (Gateway :4000)
 
 ```
-super-trading-platform/
-├── apps/
-│   └── gateway/              # Unified API Gateway
-│       ├── src/
-│       │   ├── routes/       # REST API endpoints
-│       │   ├── services/     # Service registry
-│       │   └── websocket/    # Real-time events
-│       └── package.json
-├── trading-orchestrator/     # Core Orchestration
-│   ├── src/
-│   │   ├── orchestrator/     # Agent lifecycle, permissions
-│   │   ├── adapters/         # Service adapters
-│   │   └── types/            # TypeScript types
-│   └── package.json
-├── trading-frontend/         # Premium Dashboard (with extracted features)
-│   ├── src/
-│   │   ├── app/              # Next.js pages
-│   │   ├── components/       # UI components
-│   │   ├── features/         # Feature modules (god-wallets, smart-trading, bounties)
-│   │   ├── lib/              # API client, WebSocket, AI analysis, reputation
-│   │   └── types/            # TypeScript types (portfolio)
-│   └── package.json
-├── CloddsBot-main/           # Execution Engine
-├── agent-dex-main/           # Solana DEX API (backend only)
-├── openclaw-sidex-kit-main/  # Multi-Exchange Pipelines
-├── clawdnet-main/            # A2A Protocol
-├── AgentHub-Repo/            # Architecture Reference (backend only)
-├── scripts/
-│   ├── start-all.sh          # Start all services
-│   └── stop-all.sh           # Stop all services
-├── package.json              # Monorepo root
-└── README.md
+POST /api/v1/agents                  Create agent
+PUT  /api/v1/agents/:id/status       Update status
+PUT  /api/v1/agents/:id/kill         Emergency kill
+
+POST /api/v1/execution/quote         Get swap quote
+POST /api/v1/execution/swap          Execute swap
+
+GET  /api/v1/signals                 List signals
+GET  /api/v1/signals/god-wallets     God wallet activity
+
+GET  /api/v1/portfolio/positions     Current positions
+GET  /api/v1/arbitrage               Arbitrage opportunities
+GET  /api/v1/survival-mode           Current survival state
 ```
-
-## API Endpoints
-
-### Gateway API (port 4000)
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/v1/health` | GET | Service health status |
-| `/api/v1/agents` | GET/POST | List/create agents |
-| `/api/v1/agents/:id/status` | PUT | Update agent status |
-| `/api/v1/agents/:id/kill` | PUT | Emergency kill switch |
-| `/api/v1/execution/intent` | POST | Create trade intent |
-| `/api/v1/execution/quote` | POST | Get swap quote |
-| `/api/v1/execution/swap` | POST | Execute swap |
-| `/api/v1/signals` | GET | List signals |
-| `/api/v1/signals/god-wallets` | GET | God wallet tracking |
-| `/api/v1/portfolio/positions` | GET | Current positions |
-| `/api/v1/portfolio/wallet/:addr` | GET | Wallet portfolio |
-| `/api/v1/market/prices/:mint` | GET | Token price |
-| `/api/v1/market/trending` | GET | Trending tokens |
-| `/api/v1/market/arbitrage` | GET | Arbitrage opportunities |
-| `/api/v1/bounties` | GET/POST | List/create bounties |
-| `/api/v1/bounties/:id` | GET | Get bounty details |
-| `/api/v1/bounties/:id/claim` | POST | Claim bounty |
-| `/api/v1/bounties/:id/submit` | POST | Submit solution |
-| `/api/v1/bounties/:id/resolve` | POST | Resolve submission |
 
 ### WebSocket Events
 
-Connect to `ws://localhost:4000` and subscribe to rooms:
-
 ```javascript
 socket.emit('subscribe', ['signals', 'positions', 'market']);
+
+// Events received:
+socket.on('signal_received', data => { /* whale/ai/arb signals */ });
+socket.on('whale_detected', data => { /* god wallet trade */ });
+socket.on('ai_reasoning', data => { /* AI analysis stream */ });
+socket.on('price_update', data => { /* real-time prices */ });
+socket.on('execution_completed', data => { /* trade executed */ });
 ```
 
-| Event | Description |
-|-------|-------------|
-| `signal_received` | New signal from any source |
-| `whale_detected` | Whale trade alert |
-| `god_wallet_buy` | God wallet purchase |
-| `ai_reasoning` | AI analysis stream |
-| `arbitrage_opportunity` | Arb opportunity |
-| `position_opened` | New position |
-| `position_closed` | Position closed |
-| `price_update` | Price change |
-| `execution_completed` | Trade executed |
+---
 
-## Adapters
+## Demo Features
 
-The orchestrator uses adapters to connect to each service:
+When you run the demo, you'll see:
 
-```typescript
-import {
-  CloddsBotAdapter,
-  AgentDexAdapter,
-  OpusXAdapter,
-  OpenClawAdapter,
-  OsintMarketAdapter,
-  ClawdnetAdapter
-} from 'trading-orchestrator';
+1. **Dashboard** - Real-time signal feed with whale alerts and AI reasoning
+2. **Agent Management** - Deploy, pause, and monitor trading agents
+3. **Copy Trading** - Follow God Wallets with trust scores
+4. **Arbitrage Scanner** - Cross-platform opportunities
+5. **Swarm Trading** - Multi-wallet coordinated execution
+6. **Survival Mode** - Adaptive risk visualization
 
-// Example: Execute swap via AgentDEX
-const agentDex = new AgentDexAdapter({ baseUrl: 'http://localhost:3001' });
-const result = await agentDex.executeSwap({
-  inputMint: 'So11111111111111111111111111111111111111112',
-  outputMint: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
-  amount: '1000000000',
-});
+---
 
-// Example: Check risk via CloddsBot
-const cloddsbot = new CloddsBotAdapter({ baseUrl: 'http://localhost:18789' });
-const riskCheck = await cloddsbot.checkRisk({
-  userId: 'agent-1',
-  platform: 'polymarket',
-  side: 'buy',
-  size: 1000,
-  price: 0.65,
-});
-```
+## Environment Setup
 
-## Features by Source
-
-### Trading & Execution
-- 9 Prediction Markets (CloddsBot)
-- 4 CEX Perpetuals up to 200x (CloddsBot, OpenClaw)
-- Solana DEX via Jupiter (AgentDEX, CloddsBot)
-- EVM DEX via Uniswap/1inch (CloddsBot, OpenClaw)
-- Smart Router for best price (CloddsBot)
-- MEV Protection via Jito (CloddsBot)
-
-### Intelligence & Signals
-- 24 God Wallet Tracking (Opus-X)
-- Whale Detection (CloddsBot, Opus-X)
-- AI Entry Analysis with Gemini (Opus-X)
-- Arbitrage Detection (CloddsBot)
-- OSINT Bounty Marketplace (OSINT Market)
-
-### Risk & Safety
-- VaR/CVaR Risk Engine (CloddsBot)
-- Circuit Breaker (CloddsBot)
-- Survival Mode (OpenClaw)
-- Permission Manager (Orchestrator)
-- Kill Switch (Orchestrator)
-
-### AI & Agents
-- 6 LLM Providers (CloddsBot)
-- 103 Skills (CloddsBot)
-- Agent Discovery (ClawdNet)
-- A2A Protocol (ClawdNet)
-- X402 Payments (ClawdNet, OpenClaw)
-
-## Development
-
-### Running Individual Services
+Copy `.env.example` to `.env` and configure:
 
 ```bash
-# Gateway
-cd apps/gateway && npm run dev
+# Core Services
+GATEWAY_PORT=4000
+FRONTEND_URL=http://localhost:3000
 
-# Orchestrator
-cd trading-orchestrator && npm run dev
+# Solana
+SOLANA_RPC_URL=https://api.mainnet-beta.solana.com
+SOLANA_PRIVATE_KEY=
 
-# Frontend
-cd trading-frontend && npm run dev
+# AI Providers
+ANTHROPIC_API_KEY=
+OPENAI_API_KEY=
+GOOGLE_GEMINI_API_KEY=
 
-# CloddsBot
-cd CloddsBot-main && npm start
-
-# AgentDEX
-cd agent-dex-main/api && npm run dev
+# CEX API Keys (optional)
+BINANCE_API_KEY=
+BYBIT_API_KEY=
 ```
 
-### Building for Production
-
-```bash
-npm run build
-```
-
-## Environment Variables
-
-See `.env.example` for all required variables:
-
-- **Gateway**: Port, CORS, service URLs
-- **CloddsBot**: AI API keys, Solana keys, channel tokens
-- **AgentDEX**: Helius RPC URL
-- **Opus-X**: Gemini API, Supabase
-- **OpenClaw**: Sidex token, EVM keys, CEX API keys
-- **OSINT Market**: Escrow keys, database URL
+---
 
 ## Tech Stack
 
 | Layer | Technology |
 |-------|------------|
 | Frontend | Next.js 16, React 19, Tailwind CSS 4, Framer Motion |
-| Backend | Node.js 20+, Express, TypeScript |
-| Real-time | Socket.io, WebSocket |
-| Blockchain | @solana/web3.js, viem, ethers.js |
-| Database | SQLite, Supabase PostgreSQL |
-| AI | Claude, GPT-4, Gemini, Groq |
+| Gateway | Express.js, Socket.io, TypeScript |
+| Database | SQLite (better-sqlite3), Supabase PostgreSQL |
+| Blockchain | @solana/web3.js, viem, Jupiter V6, Wormhole |
+| AI/LLM | Claude 3, GPT-4, Gemini, Groq |
+
+---
+
+## What Makes This Unique
+
+1. **7 Projects Unified** - First platform to consolidate this many trading tools
+2. **103 AI Skills** - Comprehensive skill library for agents
+3. **Survival Mode** - Novel adaptive risk management
+4. **God Wallet Tracking** - 24 elite traders in one view
+5. **A2A Protocol** - Agents can discover and pay each other
+6. **Multi-Chain** - Solana + EVM via Wormhole
+7. **MEV Protection** - Jito bundles for all Solana trades
+
+---
 
 ## License
 
 MIT
+
+---
+
+Built for the Solana Colosseum Hackathon
