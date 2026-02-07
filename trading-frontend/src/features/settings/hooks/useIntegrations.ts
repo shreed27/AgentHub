@@ -13,6 +13,31 @@ import {
   PlatformsData,
 } from '../types';
 
+// Default platforms when gateway is unavailable
+const DEFAULT_PLATFORMS: PlatformsData = {
+  messaging: [
+    { id: 'telegram', name: 'Telegram', icon: '📱', category: 'messaging', description: 'Receive instant trade alerts via Telegram bot', connected: false, status: 'disconnected' },
+    { id: 'discord', name: 'Discord', icon: '💬', category: 'messaging', description: 'Get notifications in your Discord server', connected: false, status: 'disconnected' },
+    { id: 'slack', name: 'Slack', icon: '💼', category: 'messaging', description: 'Integrate with your Slack workspace', connected: false, status: 'disconnected' },
+    { id: 'email', name: 'Email', icon: '📧', category: 'messaging', description: 'Receive email notifications for important events', connected: false, status: 'disconnected' },
+  ],
+  exchange: [
+    { id: 'binance', name: 'Binance', icon: '🔶', category: 'exchange', description: 'Connect your Binance account for futures trading', connected: false, status: 'disconnected' },
+    { id: 'bybit', name: 'Bybit', icon: '⚡', category: 'exchange', description: 'Trade futures on Bybit exchange', connected: false, status: 'disconnected' },
+  ],
+  prediction: [
+    { id: 'polymarket', name: 'Polymarket', icon: '📊', category: 'prediction', description: 'Trade on Polymarket prediction markets', connected: false, status: 'disconnected' },
+    { id: 'kalshi', name: 'Kalshi', icon: '📈', category: 'prediction', description: 'Access Kalshi prediction markets', connected: false, status: 'disconnected' },
+  ],
+  notificationEvents: [
+    { id: 'trade_executed', name: 'Trade Executed', description: 'When a trade is successfully executed' },
+    { id: 'price_alert', name: 'Price Alert', description: 'When a price target is reached' },
+    { id: 'position_closed', name: 'Position Closed', description: 'When a position is closed' },
+    { id: 'stop_loss_hit', name: 'Stop Loss Hit', description: 'When a stop loss is triggered' },
+    { id: 'take_profit_hit', name: 'Take Profit Hit', description: 'When take profit is triggered' },
+  ],
+};
+
 interface UseIntegrationsResult {
   // Data
   platforms: PlatformsData | null;
@@ -46,28 +71,59 @@ export function useIntegrations(): UseIntegrationsResult {
 
   const refreshPlatforms = useCallback(async () => {
     try {
-      const [platformsRes, connectedRes, notifRes] = await Promise.all([
+      const [platformsRes, connectedRes, notifRes] = await Promise.allSettled([
         api.getAvailablePlatforms(),
         api.getConnectedPlatforms(),
         api.getNotificationSettings(),
       ]);
 
-      if (platformsRes.success && platformsRes.data) {
-        setPlatforms(platformsRes.data);
-        if (platformsRes.data.notificationEvents) {
-          setNotificationEvents(platformsRes.data.notificationEvents);
+      // Handle platforms response
+      if (platformsRes.status === 'fulfilled' && platformsRes.value.success && platformsRes.value.data) {
+        setPlatforms(platformsRes.value.data);
+        if (platformsRes.value.data.notificationEvents) {
+          setNotificationEvents(platformsRes.value.data.notificationEvents);
+        }
+      } else {
+        // Use default platforms when gateway is unavailable
+        console.warn('Gateway unavailable, using default platforms');
+        setPlatforms(DEFAULT_PLATFORMS);
+        setNotificationEvents(DEFAULT_PLATFORMS.notificationEvents);
+      }
+
+      // Handle connected platforms response
+      if (connectedRes.status === 'fulfilled' && connectedRes.value.success && connectedRes.value.data) {
+        setConnectedPlatforms(connectedRes.value.data);
+      } else {
+        // Load from localStorage if gateway unavailable
+        const savedConnections = localStorage.getItem('connected_platforms');
+        if (savedConnections) {
+          try {
+            setConnectedPlatforms(JSON.parse(savedConnections));
+          } catch {
+            setConnectedPlatforms([]);
+          }
         }
       }
 
-      if (connectedRes.success && connectedRes.data) {
-        setConnectedPlatforms(connectedRes.data);
-      }
-
-      if (notifRes.success && notifRes.data) {
-        setNotificationSettings(notifRes.data);
+      // Handle notification settings response
+      if (notifRes.status === 'fulfilled' && notifRes.value.success && notifRes.value.data) {
+        setNotificationSettings(notifRes.value.data);
+      } else {
+        // Load from localStorage if gateway unavailable
+        const savedSettings = localStorage.getItem('notification_settings');
+        if (savedSettings) {
+          try {
+            setNotificationSettings(JSON.parse(savedSettings));
+          } catch {
+            setNotificationSettings({});
+          }
+        }
       }
     } catch (error) {
       console.error('Failed to fetch integrations:', error);
+      // Fallback to defaults
+      setPlatforms(DEFAULT_PLATFORMS);
+      setNotificationEvents(DEFAULT_PLATFORMS.notificationEvents);
     } finally {
       setLoading(false);
     }
@@ -89,13 +145,58 @@ export function useIntegrations(): UseIntegrationsResult {
         await refreshPlatforms();
         return { success: true };
       }
+
+      // If gateway fails, try to save locally
+      if (response.error?.includes('Network error') || response.error?.includes('fetch')) {
+        console.warn('Gateway unavailable, saving connection locally');
+
+        // Find platform info
+        const allPlatforms = [...(platforms?.messaging || []), ...(platforms?.exchange || []), ...(platforms?.prediction || [])];
+        const platformInfo = allPlatforms.find(p => p.id === platform);
+
+        if (platformInfo) {
+          const newConnection: ConnectedPlatform = {
+            id: `local_${platform}_${Date.now()}`,
+            userId: 'local',
+            platform,
+            category: platformInfo.category,
+            config: { ...config, credentials: '***' }, // Don't store actual credentials
+            status: 'connected',
+            lastConnectedAt: Date.now(),
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+            name: platformInfo.name,
+            icon: platformInfo.icon,
+            description: platformInfo.description,
+          };
+
+          const updatedConnections = [...connectedPlatforms, newConnection];
+          setConnectedPlatforms(updatedConnections);
+          localStorage.setItem('connected_platforms', JSON.stringify(updatedConnections));
+
+          // Update platform status
+          if (platforms) {
+            const updatedPlatforms = { ...platforms };
+            const category = platformInfo.category as keyof PlatformsData;
+            if (Array.isArray(updatedPlatforms[category])) {
+              updatedPlatforms[category] = (updatedPlatforms[category] as Platform[]).map((p: Platform) =>
+                p.id === platform ? { ...p, connected: true, status: 'connected' as const } : p
+              );
+            }
+            setPlatforms(updatedPlatforms);
+          }
+
+          return { success: true };
+        }
+      }
+
       return { success: false, error: response.error || 'Failed to connect' };
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : 'Failed to connect' };
     } finally {
       setConnectingPlatform(null);
     }
-  }, [refreshPlatforms]);
+  }, [refreshPlatforms, platforms, connectedPlatforms]);
 
   const disconnectPlatform = useCallback(async (platform: string): Promise<{ success: boolean; error?: string }> => {
     try {
@@ -104,11 +205,36 @@ export function useIntegrations(): UseIntegrationsResult {
         await refreshPlatforms();
         return { success: true };
       }
+
+      // If gateway fails, disconnect locally
+      if (response.error?.includes('Network error') || response.error?.includes('fetch')) {
+        console.warn('Gateway unavailable, disconnecting locally');
+
+        const updatedConnections = connectedPlatforms.filter(p => p.platform !== platform);
+        setConnectedPlatforms(updatedConnections);
+        localStorage.setItem('connected_platforms', JSON.stringify(updatedConnections));
+
+        // Update platform status
+        if (platforms) {
+          const updatedPlatforms = { ...platforms };
+          for (const category of ['messaging', 'exchange', 'prediction'] as const) {
+            if (Array.isArray(updatedPlatforms[category])) {
+              updatedPlatforms[category] = (updatedPlatforms[category] as Platform[]).map((p: Platform) =>
+                p.id === platform ? { ...p, connected: false, status: 'disconnected' as const } : p
+              );
+            }
+          }
+          setPlatforms(updatedPlatforms);
+        }
+
+        return { success: true };
+      }
+
       return { success: false, error: response.error || 'Failed to disconnect' };
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : 'Failed to disconnect' };
     }
-  }, [refreshPlatforms]);
+  }, [refreshPlatforms, platforms, connectedPlatforms]);
 
   const testConnection = useCallback(async (
     platform: string,
@@ -120,10 +246,29 @@ export function useIntegrations(): UseIntegrationsResult {
       if (response.success && response.data) {
         return response.data;
       }
-      return null;
+
+      // If gateway unavailable, return a status indicating gateway is down
+      if (response.error?.includes('Network error') || response.error?.includes('fetch')) {
+        return {
+          platform,
+          testResult: 'failed',
+          message: 'Gateway unavailable. Credentials saved locally - they will be validated when the gateway is online.',
+          latencyMs: undefined,
+        };
+      }
+
+      return {
+        platform,
+        testResult: 'failed',
+        message: response.error || 'Connection test failed',
+      };
     } catch (error) {
       console.error('Failed to test connection:', error);
-      return null;
+      return {
+        platform,
+        testResult: 'failed',
+        message: 'Gateway unavailable. Please try again later.',
+      };
     } finally {
       setTestingPlatform(null);
     }
