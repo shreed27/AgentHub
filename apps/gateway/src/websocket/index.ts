@@ -59,121 +59,91 @@ export function setupWebSocket(
     });
   });
 
-  // Start background tasks
-  startPriceUpdates(io, serviceRegistry, logger);
-  startSignalAggregation(io, serviceRegistry, logger);
+  // Start background tasks - only real data monitoring
   startHealthMonitoring(io, serviceRegistry, logger);
+  startRealDataPolling(io, serviceRegistry, logger);
 
-  logger.info('WebSocket server initialized');
+  logger.info('WebSocket server initialized (no mock emissions)');
 }
 
-// Simulated price updates (every 2 seconds)
-function startPriceUpdates(
+// Poll real data from services and emit updates
+function startRealDataPolling(
   io: SocketIOServer,
   serviceRegistry: ServiceRegistry,
   logger: Logger
 ): void {
-  setInterval(() => {
-    // Emit mock price updates
-    const priceUpdate = {
-      type: 'price_update',
-      timestamp: Date.now(),
-      data: {
-        SOL: { price: 100 + Math.random() * 10, change24h: (Math.random() - 0.5) * 10 },
-        BTC: { price: 45000 + Math.random() * 1000, change24h: (Math.random() - 0.5) * 5 },
-        ETH: { price: 2500 + Math.random() * 100, change24h: (Math.random() - 0.5) * 8 },
-      },
-    };
+  // Poll for real price updates from agent-dex (every 5 seconds)
+  setInterval(async () => {
+    try {
+      const client = serviceRegistry.getClient('agent-dex');
+      const response = await client.get('/api/v1/prices', {
+        params: { mints: 'So11111111111111111111111111111111111111112' } // SOL
+      });
 
-    io.to('market').emit('price_update', priceUpdate);
-  }, 2000);
-}
+      if (response.data.data) {
+        io.to('market').emit('price_update', {
+          type: 'price_update',
+          timestamp: Date.now(),
+          data: response.data.data,
+          source: 'agent-dex',
+        });
+      }
+    } catch (error) {
+      // Silently fail - service may be offline
+    }
+  }, 5000);
 
-// Signal aggregation from various sources
-function startSignalAggregation(
-  io: SocketIOServer,
-  serviceRegistry: ServiceRegistry,
-  logger: Logger
-): void {
-  // Simulated whale signal every 30 seconds
-  setInterval(() => {
-    const whaleActions = ['buy', 'sell'];
-    const tokens = ['SOL', 'BONK', 'JUP', 'WIF', 'ORCA'];
+  // Poll for real arbitrage opportunities from cloddsbot (every 30 seconds)
+  setInterval(async () => {
+    try {
+      const client = serviceRegistry.getClient('cloddsbot');
+      const response = await client.get('/api/arbitrage');
 
-    const whaleSignal = {
-      type: 'whale_detected',
-      timestamp: Date.now(),
-      data: {
-        id: `whale-${Date.now()}`,
-        source: 'whale',
-        walletAddress: `Whale${Math.floor(Math.random() * 24)}...abc`,
-        walletLabel: `God Wallet ${Math.floor(Math.random() * 24) + 1}`,
-        token: tokens[Math.floor(Math.random() * tokens.length)],
-        action: whaleActions[Math.floor(Math.random() * whaleActions.length)],
-        amount: Math.floor(Math.random() * 100000) + 10000,
-        confidence: 70 + Math.floor(Math.random() * 30),
-      },
-    };
-
-    io.to('signals').emit('whale_detected', whaleSignal);
-    io.emit('signal_received', { ...whaleSignal, type: 'signal_received' });
-
-    logger.debug({ signal: whaleSignal.data }, 'Emitted whale signal');
+      if (response.data && Array.isArray(response.data)) {
+        for (const arb of response.data) {
+          io.to('signals').emit('arbitrage_opportunity', {
+            type: 'arbitrage_opportunity',
+            timestamp: Date.now(),
+            data: arb,
+            source: 'cloddsbot',
+          });
+        }
+      }
+    } catch (error) {
+      // Silently fail - service may be offline
+    }
   }, 30000);
 
-  // Simulated AI reasoning every 45 seconds
-  setInterval(() => {
-    const recommendations = ['strong_buy', 'buy', 'watch', 'avoid'];
-    const tokens = ['SOL', 'BONK', 'JUP', 'WIF'];
+  // Poll for god wallet activity from opus-x (every 30 seconds)
+  setInterval(async () => {
+    try {
+      const client = serviceRegistry.getClient('opus-x');
+      const response = await client.get('/api/wallets/activity');
 
-    const aiSignal = {
-      type: 'ai_reasoning',
-      timestamp: Date.now(),
-      data: {
-        id: `ai-${Date.now()}`,
-        source: 'ai',
-        token: tokens[Math.floor(Math.random() * tokens.length)],
-        recommendation: recommendations[Math.floor(Math.random() * recommendations.length)],
-        reasoning: 'Strong momentum detected with increasing volume. Whale accumulation pattern observed.',
-        confidence: 60 + Math.floor(Math.random() * 40),
-        metrics: {
-          liquidity: Math.random() * 100,
-          momentum: Math.random() * 100,
-          trustScore: Math.random() * 100,
-        },
-      },
-    };
-
-    io.to('signals').emit('ai_reasoning', aiSignal);
-    io.emit('ai_analysis', { ...aiSignal, type: 'ai_analysis' });
-
-    logger.debug({ signal: aiSignal.data }, 'Emitted AI reasoning');
-  }, 45000);
-
-  // Simulated arbitrage opportunity every 60 seconds
-  setInterval(() => {
-    const arbSignal = {
-      type: 'arbitrage_opportunity',
-      timestamp: Date.now(),
-      data: {
-        id: `arb-${Date.now()}`,
-        source: 'arbitrage',
-        token: 'BTC-100k-2025',
-        buyPlatform: 'Polymarket',
-        buyPrice: 0.62 + Math.random() * 0.05,
-        sellPlatform: 'Kalshi',
-        sellPrice: 0.68 + Math.random() * 0.05,
-        profitPercent: 5 + Math.random() * 10,
-        liquidity: 10000 + Math.random() * 50000,
-        confidence: 75 + Math.floor(Math.random() * 25),
-        expiresIn: 60000,
-      },
-    };
-
-    io.to('signals').emit('arbitrage_opportunity', arbSignal);
-
-    logger.debug({ signal: arbSignal.data }, 'Emitted arbitrage opportunity');
-  }, 60000);
+      if (response.data && Array.isArray(response.data)) {
+        for (const activity of response.data) {
+          if (activity.type === 'buy' || activity.type === 'sell') {
+            io.to('signals').emit('whale_detected', {
+              type: 'whale_detected',
+              timestamp: Date.now(),
+              data: {
+                source: 'god_wallet',
+                walletAddress: activity.wallet,
+                walletLabel: activity.label,
+                token: activity.token,
+                action: activity.type,
+                amount: activity.amount,
+                confidence: activity.trustScore || 75,
+              },
+              source: 'opus-x',
+            });
+          }
+        }
+      }
+    } catch (error) {
+      // Silently fail - service may be offline
+    }
+  }, 30000);
 }
 
 // Health monitoring
