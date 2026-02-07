@@ -158,6 +158,31 @@ export interface JupiterLimitOrderFee {
 }
 
 // ============================================================================
+// Slippage Validation
+// ============================================================================
+
+const SLIPPAGE_BOUNDS = {
+  MIN_BPS: 1,      // 0.01%
+  MAX_BPS: 500,    // 5%
+  DEFAULT_BPS: 50, // 0.5%
+};
+
+/**
+ * Validate slippage bounds to prevent excessive loss
+ */
+function validateSlippage(slippageBps?: number): number {
+  if (slippageBps === undefined) return SLIPPAGE_BOUNDS.DEFAULT_BPS;
+
+  if (slippageBps < SLIPPAGE_BOUNDS.MIN_BPS) {
+    throw new Error(`Slippage ${slippageBps} bps is below minimum ${SLIPPAGE_BOUNDS.MIN_BPS} (0.01%)`);
+  }
+  if (slippageBps > SLIPPAGE_BOUNDS.MAX_BPS) {
+    throw new Error(`Slippage ${slippageBps} bps exceeds maximum ${SLIPPAGE_BOUNDS.MAX_BPS} (5%)`);
+  }
+  return slippageBps;
+}
+
+// ============================================================================
 // Configuration
 // ============================================================================
 
@@ -181,12 +206,15 @@ function getJupiterHeaders(): Record<string, string> {
  * Useful for price discovery and displaying trade previews.
  */
 export async function getJupiterQuote(params: JupiterSwapParams): Promise<JupiterQuoteResult> {
+  // Validate slippage bounds
+  const validatedSlippage = validateSlippage(params.slippageBps);
+
   const baseUrl = getJupiterBaseUrl();
   const query = new URLSearchParams({
     inputMint: params.inputMint,
     outputMint: params.outputMint,
     amount: params.amount,
-    slippageBps: (params.slippageBps ?? 50).toString(),
+    slippageBps: validatedSlippage.toString(),
     swapMode: params.swapMode ?? 'ExactIn',
   });
 

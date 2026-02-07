@@ -627,7 +627,7 @@ export class PumpFunSwarm extends EventEmitter {
 
       try {
         const signature = await this.connection.sendRawTransaction(result.tx.serialize(), {
-          skipPreflight: true,
+          skipPreflight: process.env.SOLANA_SKIP_PREFLIGHT === 'true',
           maxRetries: 3,
         });
         return {
@@ -778,7 +778,7 @@ export class PumpFunSwarm extends EventEmitter {
         }
         tx.sign([wallet.keypair]);
         const signature = await this.connection.sendRawTransaction(tx.serialize(), {
-          skipPreflight: true,
+          skipPreflight: process.env.SOLANA_SKIP_PREFLIGHT === 'true',
           maxRetries: 3,
         });
         return {
@@ -867,7 +867,7 @@ export class PumpFunSwarm extends EventEmitter {
 
     tx.sign([wallet.keypair]);
     const signature = await this.connection.sendRawTransaction(tx.serialize(), {
-      skipPreflight: true,
+      skipPreflight: process.env.SOLANA_SKIP_PREFLIGHT === 'true',
       maxRetries: 3,
     });
 
@@ -1194,7 +1194,7 @@ export class PumpFunSwarm extends EventEmitter {
         tx.sign([fromWallet.keypair]);
 
         const signature = await this.connection.sendRawTransaction(tx.serialize(), {
-          skipPreflight: true,
+          skipPreflight: process.env.SOLANA_SKIP_PREFLIGHT === 'true',
           maxRetries: 3,
         });
 
@@ -1292,7 +1292,7 @@ export class PumpFunSwarm extends EventEmitter {
         tx.sign([sourceWallet.keypair]);
 
         const signature = await this.connection.sendRawTransaction(tx.serialize(), {
-          skipPreflight: true,
+          skipPreflight: process.env.SOLANA_SKIP_PREFLIGHT === 'true',
           maxRetries: 3,
         });
 
