@@ -72,9 +72,11 @@ import { setupWebSocket } from './websocket/index.js';
 
 // Services
 import { ServiceRegistry } from './services/registry.js';
+import { priceMonitor } from './services/priceMonitor.js';
 
 // Middleware
 import { correlationIdMiddleware } from './middleware/correlationId.js';
+import { optionalWalletMiddleware } from './middleware/walletAuth.js';
 
 // Config
 import { validateAndExit } from './config/validateEnv.js';
@@ -119,6 +121,7 @@ app.use(helmet());
 app.use(cors(corsOptions));
 app.use(express.json());
 app.use(correlationIdMiddleware);
+app.use(optionalWalletMiddleware);
 
 // Request logging with correlation ID
 app.use((req, res, next) => {
@@ -257,11 +260,15 @@ httpServer.listen(PORT, () => {
 ║  • ClawdNet:     ${serviceRegistry.config.clawdnetUrl.padEnd(35)}║
 ╚════════════════════════════════════════════════════════════╝
   `);
+
+  // Start the price monitor for limit order auto-execution
+  priceMonitor.start(io, logger);
 });
 
 // Graceful shutdown
 process.on('SIGTERM', () => {
   logger.info('SIGTERM received, shutting down gracefully...');
+  priceMonitor.stop();
   httpServer.close(() => {
     closeDatabase();
     logger.info('Server closed');
@@ -271,6 +278,7 @@ process.on('SIGTERM', () => {
 
 process.on('SIGINT', () => {
   logger.info('SIGINT received, shutting down gracefully...');
+  priceMonitor.stop();
   httpServer.close(() => {
     closeDatabase();
     logger.info('Server closed');
