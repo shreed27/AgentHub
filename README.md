@@ -15,7 +15,7 @@ Crypto traders juggle **10+ fragmented platforms** daily:
 
 **AI agents can't operate efficiently** across this fragmentation. They need unified access, consistent risk management, and coordinated execution.
 
-## The Solution
+## The Solution:
 
 DAIN unifies **7 trading projects** into one super platform where AI agents can:
 
