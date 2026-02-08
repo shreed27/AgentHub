@@ -11,6 +11,78 @@ interface ApiResponse<T> {
   source?: string;
 }
 
+// Wallet context for authenticated requests
+interface WalletContext {
+  publicKey: string;
+  signMessage?: (message: Uint8Array) => Promise<Uint8Array>;
+}
+
+let walletContext: WalletContext | null = null;
+
+/**
+ * Set the wallet context for authenticated API requests
+ */
+export function setWalletContext(wallet: WalletContext | null): void {
+  walletContext = wallet;
+}
+
+/**
+ * Create a signed message for authentication
+ */
+async function createAuthHeaders(action: string): Promise<Record<string, string>> {
+  const headers: Record<string, string> = {};
+
+  if (!walletContext) {
+    return headers;
+  }
+
+  headers['X-Wallet-Address'] = walletContext.publicKey;
+
+  // For write operations, we need to sign a message
+  if (walletContext.signMessage) {
+    try {
+      const timestamp = Date.now();
+      const nonce = Math.random().toString(36).substring(2, 15);
+      const message = `${action}:${timestamp}:${nonce}`;
+      const messageBytes = new TextEncoder().encode(message);
+      const signature = await walletContext.signMessage(messageBytes);
+
+      // Convert signature to base58
+      headers['X-Wallet-Message'] = message;
+      headers['X-Wallet-Signature'] = encodeBase58(signature);
+    } catch (error) {
+      console.error('Failed to sign message:', error);
+    }
+  }
+
+  return headers;
+}
+
+/**
+ * Simple base58 encoding (compatible with Solana)
+ */
+function encodeBase58(bytes: Uint8Array): string {
+  const ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+  let result = '';
+  let num = BigInt('0x' + Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join(''));
+
+  while (num > 0) {
+    result = ALPHABET[Number(num % BigInt(58))] + result;
+    num = num / BigInt(58);
+  }
+
+  // Handle leading zeros
+  for (const byte of bytes) {
+    if (byte === 0) {
+      result = '1' + result;
+    } else {
+      break;
+    }
+  }
+
+  return result || '1';
+}
+
 class ApiClient {
   private baseUrl: string;
 
@@ -21,14 +93,28 @@ class ApiClient {
   private async request<T>(
     method: string,
     path: string,
-    body?: unknown
+    body?: unknown,
+    requiresAuth: boolean = false
   ): Promise<ApiResponse<T>> {
     try {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+
+      // Add wallet address header if available
+      if (walletContext) {
+        headers['X-Wallet-Address'] = walletContext.publicKey;
+      }
+
+      // For write operations that require auth, add signature
+      if (requiresAuth && method !== 'GET' && walletContext?.signMessage) {
+        const authHeaders = await createAuthHeaders(path);
+        Object.assign(headers, authHeaders);
+      }
+
       const response = await fetch(`${this.baseUrl}${path}`, {
         method,
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
         body: body ? JSON.stringify(body) : undefined,
       });
 
