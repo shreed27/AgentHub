@@ -24,7 +24,8 @@ export type WebSocketEventType =
   | 'arbitrage_opportunity'
   | 'ai_analysis'
   | 'ai_reasoning'
-  | 'health_update';
+  | 'health_update'
+  | 'limit_order_triggered';
 
 interface WebSocketMessage<T = unknown> {
   type: WebSocketEventType;
@@ -100,6 +101,7 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
       'ai_analysis',
       'ai_reasoning',
       'health_update',
+      'limit_order_triggered',
     ];
 
     eventTypes.forEach((eventType) => {
@@ -314,6 +316,51 @@ export function useAIReasoning() {
   }, [subscribe]);
 
   return { reasoning, isConnected };
+}
+
+// Hook for limit order triggers
+export function useLimitOrderTriggers() {
+  const [triggeredOrders, setTriggeredOrders] = useState<
+    Array<{
+      id: string;
+      walletAddress: string;
+      inputMint: string;
+      outputMint: string;
+      inputAmount: number;
+      targetPrice: number;
+      currentPrice: number;
+      direction: 'above' | 'below';
+      triggeredAt: number;
+    }>
+  >([]);
+
+  const { subscribe, isConnected } = useWebSocket({
+    rooms: ['execution'],
+  });
+
+  useEffect(() => {
+    const unsubscribe = subscribe<{
+      id: string;
+      walletAddress: string;
+      inputMint: string;
+      outputMint: string;
+      inputAmount: number;
+      targetPrice: number;
+      currentPrice: number;
+      direction: 'above' | 'below';
+      triggeredAt: number;
+    }>('limit_order_triggered', (order) => {
+      setTriggeredOrders((prev) => [order, ...prev.slice(0, 9)]);
+    });
+
+    return unsubscribe;
+  }, [subscribe]);
+
+  const clearTriggeredOrder = useCallback((orderId: string) => {
+    setTriggeredOrders((prev) => prev.filter((o) => o.id !== orderId));
+  }, []);
+
+  return { triggeredOrders, clearTriggeredOrder, isConnected };
 }
 
 export default useWebSocket;
