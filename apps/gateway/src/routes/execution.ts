@@ -74,13 +74,12 @@ executionRouter.get('/intent/:id', (req: Request, res: Response) => {
   });
 });
 
-// POST /api/v1/execution/quote - Get execution quote
+// POST /api/v1/execution/quote - Get execution quote (direct Jupiter)
 executionRouter.post('/quote', async (req: Request, res: Response) => {
   const logger = req.app.locals.logger;
-  const serviceRegistry: ServiceRegistry = req.app.locals.serviceRegistry;
 
   try {
-    const { inputMint, outputMint, amount, chain } = req.body;
+    const { inputMint, outputMint, amount, slippageBps = 50 } = req.body;
 
     if (!inputMint || !outputMint || !amount) {
       return res.status(400).json({
@@ -89,29 +88,45 @@ executionRouter.post('/quote', async (req: Request, res: Response) => {
       });
     }
 
-    // Try agent-dex for Solana
-    if (chain === 'solana' || !chain) {
-      try {
-        const client = serviceRegistry.getClient('agent-dex');
-        const response = await client.get('/api/v1/quote', {
-          params: { inputMint, outputMint, amount },
-        });
+    // Call Jupiter V6 Quote API directly
+    const quoteUrl = new URL('https://quote-api.jup.ag/v6/quote');
+    quoteUrl.searchParams.set('inputMint', inputMint);
+    quoteUrl.searchParams.set('outputMint', outputMint);
+    quoteUrl.searchParams.set('amount', amount.toString());
+    quoteUrl.searchParams.set('slippageBps', slippageBps.toString());
 
-        return res.json({
-          success: true,
-          source: 'agent-dex',
-          data: response.data.data,
-        });
-      } catch (error) {
-        logger.warn('agent-dex quote failed');
-      }
+    const response = await fetch(quoteUrl.toString());
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      logger.error({ errorText, status: response.status }, 'Jupiter quote failed');
+      return res.status(502).json({
+        success: false,
+        error: 'Quote service unavailable',
+        details: errorText,
+      });
     }
 
-    // Return error if no service available
-    res.status(503).json({
-      success: false,
-      error: 'Quote service unavailable',
-      message: 'No execution service available for the requested quote',
+    const quoteData = await response.json();
+
+    logger.info({ inputMint, outputMint, amount }, 'Quote retrieved from Jupiter');
+
+    return res.json({
+      success: true,
+      source: 'jupiter',
+      data: {
+        inputMint,
+        outputMint,
+        inputAmount: quoteData.inAmount,
+        outputAmount: quoteData.outAmount,
+        priceImpact: quoteData.priceImpactPct,
+        routePlan: quoteData.routePlan?.map((r: { swapInfo: { label: string }; percent: number }) => ({
+          protocol: r.swapInfo.label,
+          percent: r.percent,
+        })) || [],
+        otherAmountThreshold: quoteData.otherAmountThreshold,
+        swapMode: quoteData.swapMode,
+      },
     });
   } catch (error) {
     logger.error({ error }, 'Failed to get quote');
