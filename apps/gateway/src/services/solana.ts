@@ -73,10 +73,38 @@ export const MIN_BOUNTY_SOL = 0.1;
 // USDC on mainnet
 export const USDC_MINT = new PublicKey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v');
 
+// RPC endpoints for fallback
+const RPC_ENDPOINTS = [
+  process.env.SOLANA_RPC_URL,
+  'https://api.mainnet-beta.solana.com',
+].filter(Boolean) as string[];
+
+let currentRpcIndex = 0;
+
 // Get Solana connection
 export function getConnection(): Connection {
   const rpcUrl = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
   return new Connection(rpcUrl, 'confirmed');
+}
+
+// Get connection with automatic fallback on failure
+export async function getConnectionWithFallback(): Promise<Connection> {
+  for (let i = 0; i < RPC_ENDPOINTS.length; i++) {
+    const idx = (currentRpcIndex + i) % RPC_ENDPOINTS.length;
+    const conn = new Connection(RPC_ENDPOINTS[idx], 'confirmed');
+    try {
+      // Test the connection with a simple call
+      await conn.getLatestBlockhash();
+      // If successful, remember this index for next time
+      currentRpcIndex = idx;
+      return conn;
+    } catch (error) {
+      console.warn(`[Solana] RPC endpoint ${RPC_ENDPOINTS[idx]} failed, trying next...`);
+      continue;
+    }
+  }
+  // If all fail, return the primary connection anyway
+  throw new Error('All RPC endpoints failed');
 }
 
 // Get escrow keypair from env (for signing transactions)
