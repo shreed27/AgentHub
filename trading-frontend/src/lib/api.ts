@@ -653,6 +653,71 @@ class ApiClient {
     return this.request<{ message: string }>('PUT', '/api/v1/integrations/notifications/settings', { settings });
   }
 
+  // ==================== Pairing API ====================
+
+  async generatePairingCode() {
+    return this.request<{
+      success: boolean;
+      code: string;
+      expiresIn: string;
+      instructions: string;
+    }>('POST', '/api/v1/pairing/code');
+  }
+
+  async checkPairingStatus(code: string) {
+    return this.request<{
+      code: string;
+      status: 'pending' | 'completed' | 'expired';
+      linkedAccount?: {
+        channel: string;
+        userId: string;
+        username?: string;
+        linkedAt: string;
+      };
+    }>('GET', `/api/v1/pairing/status/${code}`);
+  }
+
+  async getLinkedAccounts() {
+    return this.request<{
+      walletAddress: string;
+      linkedAccounts: Array<{
+        channel: string;
+        userId: string;
+        username?: string;
+        linkedAt: string;
+        linkedBy: string;
+      }>;
+      count: number;
+    }>('GET', '/api/v1/pairing/linked');
+  }
+
+  async unlinkAccount(channel: string, userId: string) {
+    return this.request<{
+      success: boolean;
+      message: string;
+    }>('DELETE', `/api/v1/pairing/linked/${channel}/${userId}`);
+  }
+
+  // ==================== Polymarket Wallet Auth ====================
+
+  async getPolymarketChallenge() {
+    return this.request<{
+      challenge: string;
+      expiresAt: number;
+    }>('GET', '/api/v1/integrations/polymarket/challenge');
+  }
+
+  async connectPolymarketWallet(params: {
+    signature: string;
+    address: string;
+    challenge: string;
+  }) {
+    return this.request<{
+      success: boolean;
+      message: string;
+    }>('POST', '/api/v1/integrations/polymarket/connect-wallet', params);
+  }
+
   // ==================== Limit Orders ====================
 
   async getLimitOrders(walletAddress: string, status?: string) {
@@ -855,8 +920,10 @@ class ApiClient {
   }
 
   // ==================== Copy Trading ====================
+  // Note: These endpoints use x-wallet-address header for authentication (set via walletContext)
 
-  async getCopyTradingConfigs(userWallet: string) {
+  async getCopyTradingConfigs(_userWallet?: string) {
+    // userWallet param kept for backwards compatibility but not used - wallet from header is used
     return this.request<{
       data: Array<{
         id: string;
@@ -864,18 +931,23 @@ class ApiClient {
         targetWallet: string;
         targetLabel?: string;
         enabled: boolean;
-        allocationPercent: number;
+        dryRun: boolean;
+        sizingMode: string;
+        fixedSize: number;
+        allocationPercent?: number;
         maxPositionSize?: number;
         stopLossPercent?: number;
         takeProfitPercent?: number;
         totalTrades: number;
         totalPnl: number;
+        createdAt: string;
+        updatedAt: string;
       }>;
-    }>('GET', `/api/v1/copy-trading/configs?userWallet=${userWallet}`);
+    }>('GET', '/api/v1/copy-trading/configs');
   }
 
   async createCopyTradingConfig(params: {
-    userWallet: string;
+    userWallet?: string; // Kept for backwards compatibility, not used
     targetWallet: string;
     targetLabel?: string;
     allocationPercent?: number;
@@ -883,45 +955,53 @@ class ApiClient {
     stopLossPercent?: number;
     takeProfitPercent?: number;
   }) {
-    return this.request<{ data: unknown }>('POST', '/api/v1/copy-trading/configs', params);
+    // Remove userWallet from params as it comes from header
+    const { userWallet: _, ...rest } = params;
+    return this.request<{ data: unknown; code?: string }>('POST', '/api/v1/copy-trading/configs', rest);
   }
 
   async updateCopyTradingConfig(configId: string, params: Record<string, unknown>) {
-    return this.request<{ data: unknown }>('PUT', `/api/v1/copy-trading/configs/${configId}`, params);
+    return this.request<{ data: unknown }>('PATCH', `/api/v1/copy-trading/configs/${configId}`, params);
   }
 
   async deleteCopyTradingConfig(configId: string) {
-    return this.request<{ message: string }>('DELETE', `/api/v1/copy-trading/configs/${configId}`);
+    return this.request<{ success: boolean }>('DELETE', `/api/v1/copy-trading/configs/${configId}`);
   }
 
   async toggleCopyTradingConfig(configId: string, enabled: boolean) {
-    return this.request<{ data: unknown }>('POST', `/api/v1/copy-trading/configs/${configId}/toggle`, { enabled });
+    return this.request<{ success: boolean; enabled: boolean }>('POST', `/api/v1/copy-trading/configs/${configId}/toggle`, { enabled });
   }
 
   async getCopyTradingHistory(params: { userWallet?: string; configId?: string; limit?: number }) {
     const queryParams = new URLSearchParams();
-    Object.entries(params).forEach(([key, value]) => {
-      if (value !== undefined) queryParams.set(key, String(value));
-    });
+    // Only add non-userWallet params as query params
+    if (params.configId) queryParams.set('configId', params.configId);
+    if (params.limit) queryParams.set('limit', String(params.limit));
+    const queryString = queryParams.toString();
     return this.request<{
       data: Array<{
         id: string;
         configId: string;
-        originalTx: string;
-        copiedTx?: string;
+        userWallet: string;
         targetWallet: string;
-        action: string;
-        token: string;
-        originalAmount: number;
-        copiedAmount?: number;
+        marketId: string;
+        tokenId?: string;
+        outcome?: string;
+        side: string;
+        originalSize: number;
+        copiedSize: number;
+        entryPrice: number;
+        exitPrice?: number;
         status: string;
         pnl?: number;
-        createdAt: number;
+        createdAt: string;
+        closedAt?: string;
       }>;
-    }>('GET', `/api/v1/copy-trading/history?${queryParams}`);
+    }>('GET', `/api/v1/copy-trading/history${queryString ? '?' + queryString : ''}`);
   }
 
-  async getCopyTradingStats(userWallet: string) {
+  async getCopyTradingStats(_userWallet?: string) {
+    // userWallet param kept for backwards compatibility but not used - wallet from header is used
     return this.request<{
       data: {
         totalConfigs: number;
@@ -932,7 +1012,22 @@ class ApiClient {
         successRate: number;
         topPerformingTarget?: { wallet: string; pnl: number };
       };
-    }>('GET', `/api/v1/copy-trading/stats?userWallet=${userWallet}`);
+    }>('GET', '/api/v1/copy-trading/stats');
+  }
+
+  async getCopyTradingStatus() {
+    return this.request<{
+      data: {
+        active: boolean;
+        totalCopied: number;
+        totalSkipped: number;
+        totalPnl: number;
+        winRate: number;
+        avgReturn: number;
+        openPositions: number;
+        followedAddresses: number;
+      };
+    }>('GET', '/api/v1/copy-trading/status');
   }
 
   // ==================== Automation ====================
