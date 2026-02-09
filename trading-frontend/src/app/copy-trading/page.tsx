@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Users,
@@ -17,11 +17,14 @@ import {
   Activity,
   X,
   Wallet,
+  AlertCircle,
+  Link2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import api from "@/lib/api";
 import { useWallet } from "@solana/wallet-adapter-react";
-import { useWalletModal } from "@solana/wallet-adapter-react-ui";
+import { useCustomWalletModal } from "@/components/providers/CustomWalletModalProvider";
+import Link from "next/link";
 
 interface CopyConfig {
   id: string;
@@ -29,7 +32,10 @@ interface CopyConfig {
   targetWallet: string;
   targetLabel?: string;
   enabled: boolean;
-  allocationPercent: number;
+  dryRun: boolean;
+  sizingMode: string;
+  fixedSize: number;
+  allocationPercent?: number;
   maxPositionSize?: number;
   stopLossPercent?: number;
   takeProfitPercent?: number;
@@ -37,6 +43,7 @@ interface CopyConfig {
   totalPnl: number;
   tradesToday?: number;
   maxDailyTrades?: number;
+  createdAt?: string;
 }
 
 interface CopyStats {
@@ -64,14 +71,91 @@ interface CopyHistory {
   createdAt: number;
 }
 
+function ConnectPolymarketModal({ onClose }: { onClose: () => void }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ scale: 0.95, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0.95, opacity: 0 }}
+        onClick={(e) => e.stopPropagation()}
+        className="bg-zinc-900 border border-white/10 rounded-2xl max-w-md w-full"
+      >
+        <div className="p-6 border-b border-white/10 flex items-center justify-between">
+          <h2 className="text-xl font-bold text-white">Connect Polymarket</h2>
+          <button
+            onClick={onClose}
+            className="p-2 rounded-lg hover:bg-white/10 transition-colors"
+          >
+            <X className="w-5 h-5 text-muted-foreground" />
+          </button>
+        </div>
+
+        <div className="p-6 space-y-4">
+          <div className="w-16 h-16 rounded-2xl bg-purple-500/10 flex items-center justify-center mx-auto">
+            <Link2 className="w-8 h-8 text-purple-400" />
+          </div>
+
+          <div className="text-center">
+            <h3 className="text-lg font-semibold text-white mb-2">
+              Polymarket Connection Required
+            </h3>
+            <p className="text-muted-foreground text-sm">
+              To copy trade on Polymarket, you need to connect your Polymarket account first.
+              This allows us to execute trades on your behalf.
+            </p>
+          </div>
+
+          <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-4">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
+              <div className="text-sm text-amber-200">
+                <p className="font-medium">Real trades will be executed</p>
+                <p className="text-amber-300/80 mt-1">
+                  Copy trading will place real orders using your funds. Make sure you understand the risks.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="p-6 border-t border-white/10 space-y-3">
+          <Link
+            href="/settings"
+            onClick={onClose}
+            className="w-full h-12 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-medium transition-colors flex items-center justify-center gap-2"
+          >
+            <Settings className="w-4 h-4" />
+            Go to Settings
+          </Link>
+          <button
+            onClick={onClose}
+            className="w-full h-12 rounded-xl bg-white/5 hover:bg-white/10 text-white font-medium transition-colors"
+          >
+            Cancel
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
 function CreateConfigModal({
   onClose,
   onCreated,
   userWallet,
+  onCredentialsRequired,
 }: {
   onClose: () => void;
   onCreated: () => void;
   userWallet: string;
+  onCredentialsRequired: () => void;
 }) {
   const [targetWallet, setTargetWallet] = useState("");
   const [targetLabel, setTargetLabel] = useState("");
@@ -80,13 +164,15 @@ function CreateConfigModal({
   const [stopLossPercent, setStopLossPercent] = useState("");
   const [takeProfitPercent, setTakeProfitPercent] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async () => {
     if (!targetWallet.trim()) return;
 
     setIsSubmitting(true);
+    setError(null);
     try {
-      await api.createCopyTradingConfig({
+      const result = await api.createCopyTradingConfig({
         userWallet,
         targetWallet: targetWallet.trim(),
         targetLabel: targetLabel.trim() || undefined,
@@ -95,10 +181,23 @@ function CreateConfigModal({
         stopLossPercent: stopLossPercent ? parseFloat(stopLossPercent) : undefined,
         takeProfitPercent: takeProfitPercent ? parseFloat(takeProfitPercent) : undefined,
       });
+
+      if (!result.success && (result as any).code === "CREDENTIALS_REQUIRED") {
+        onClose();
+        onCredentialsRequired();
+        return;
+      }
+
       onCreated();
       onClose();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to create config:", error);
+      if (error?.response?.data?.code === "CREDENTIALS_REQUIRED") {
+        onClose();
+        onCredentialsRequired();
+      } else {
+        setError(error?.message || "Failed to create config. Please try again.");
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -196,6 +295,15 @@ function CreateConfigModal({
               />
             </div>
           </div>
+
+          {error && (
+            <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+                <p className="text-sm text-red-200">{error}</p>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="p-6 border-t border-white/10">
@@ -312,15 +420,41 @@ function ConfigCard({
 
 export default function CopyTradingPage() {
   const { publicKey, connected } = useWallet();
-  const { setVisible } = useWalletModal();
+  const { setVisible } = useCustomWalletModal();
   const [configs, setConfigs] = useState<CopyConfig[]>([]);
   const [stats, setStats] = useState<CopyStats | null>(null);
   const [history, setHistory] = useState<CopyHistory[]>([]);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showConnectPolymarketModal, setShowConnectPolymarketModal] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [isPolymarketConnected, setIsPolymarketConnected] = useState<boolean | null>(null);
 
   // Get wallet address from connected wallet
   const userWallet = connected && publicKey ? publicKey.toBase58() : null;
+
+  // Check Polymarket connection status
+  const checkPolymarketStatus = useCallback(async () => {
+    if (!userWallet) return;
+    try {
+      const result = await api.getPlatformStatus("polymarket");
+      setIsPolymarketConnected(result.success && result.data?.connected === true);
+    } catch {
+      setIsPolymarketConnected(false);
+    }
+  }, [userWallet]);
+
+  useEffect(() => {
+    checkPolymarketStatus();
+  }, [checkPolymarketStatus]);
+
+  // Handle opening the create modal with credential check
+  const handleOpenCreateModal = () => {
+    if (isPolymarketConnected === false) {
+      setShowConnectPolymarketModal(true);
+    } else {
+      setShowCreateModal(true);
+    }
+  };
 
   const fetchData = async () => {
     if (!userWallet) {
@@ -384,7 +518,7 @@ export default function CopyTradingPage() {
         </div>
         {connected ? (
           <button
-            onClick={() => setShowCreateModal(true)}
+            onClick={handleOpenCreateModal}
             className="h-10 px-6 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-medium flex items-center gap-2 shadow-lg transition-all hover:scale-105 active:scale-95"
           >
             <Plus className="w-4 h-4" />
@@ -517,7 +651,7 @@ export default function CopyTradingPage() {
                   You're not following any traders yet.
                 </p>
                 <button
-                  onClick={() => setShowCreateModal(true)}
+                  onClick={handleOpenCreateModal}
                   className="h-10 px-6 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-medium"
                 >
                   Follow Your First Trader
@@ -582,11 +716,21 @@ export default function CopyTradingPage() {
 
       {/* Create Modal */}
       <AnimatePresence>
-        {showCreateModal && (
+        {showCreateModal && userWallet && (
           <CreateConfigModal
             onClose={() => setShowCreateModal(false)}
             onCreated={fetchData}
             userWallet={userWallet}
+            onCredentialsRequired={() => setShowConnectPolymarketModal(true)}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Connect Polymarket Modal */}
+      <AnimatePresence>
+        {showConnectPolymarketModal && (
+          <ConnectPolymarketModal
+            onClose={() => setShowConnectPolymarketModal(false)}
           />
         )}
       </AnimatePresence>

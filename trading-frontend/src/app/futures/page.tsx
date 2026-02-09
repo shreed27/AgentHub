@@ -9,7 +9,7 @@ import {
 import { cn } from "@/lib/utils";
 import api from "@/lib/api";
 import { useWallet } from "@solana/wallet-adapter-react";
-import { useWalletModal } from "@solana/wallet-adapter-react-ui";
+import { useCustomWalletModal } from "@/components/providers/CustomWalletModalProvider";
 
 interface FuturesPosition {
     id: string;
@@ -54,7 +54,7 @@ const MARKETS = [
 
 export default function FuturesPage() {
     const { publicKey, connected } = useWallet();
-    const { setVisible } = useWalletModal();
+    const { setVisible } = useCustomWalletModal();
     const [positions, setPositions] = useState<FuturesPosition[]>([]);
     const [stats, setStats] = useState<FuturesStats | null>(null);
     const [loading, setLoading] = useState(true);

@@ -17,7 +17,7 @@ import { cn } from "@/lib/utils";
 import api from "@/lib/api";
 import { LimitOrders } from "@/components/trading/LimitOrders";
 import { useWallet } from "@solana/wallet-adapter-react";
-import { useWalletModal } from "@solana/wallet-adapter-react-ui";
+import { useCustomWalletModal } from "@/components/providers/CustomWalletModalProvider";
 
 interface OrderStats {
   total: number;
@@ -30,7 +30,7 @@ interface OrderStats {
 
 export default function LimitOrdersPage() {
   const { publicKey, connected } = useWallet();
-  const { setVisible } = useWalletModal();
+  const { setVisible } = useCustomWalletModal();
   const [stats, setStats] = useState<OrderStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -210,49 +210,52 @@ export default function LimitOrdersPage() {
       )}
 
       {/* How It Works */}
-      {connected && <div className="p-4 rounded-xl border border-white/5 bg-gradient-to-r from-orange-500/5 to-transparent">
-        <h3 className="font-semibold text-white mb-3 flex items-center gap-2">
-          <AlertCircle className="w-4 h-4 text-orange-400" />
-          How Limit Orders Work
-        </h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-          <div className="flex items-start gap-3">
-            <div className="w-6 h-6 rounded-full bg-orange-500/20 flex items-center justify-center text-orange-400 font-bold text-xs shrink-0">
-              1
+      {connected && (
+        <div className="p-4 rounded-xl border border-white/5 bg-gradient-to-r from-orange-500/5 to-transparent">
+          <h3 className="font-semibold text-white mb-3 flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-orange-400" />
+            How Limit Orders Work
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+            <div className="flex items-start gap-3">
+              <div className="w-6 h-6 rounded-full bg-orange-500/20 flex items-center justify-center text-orange-400 font-bold text-xs shrink-0">
+                1
+              </div>
+              <div>
+                <p className="font-medium text-white">Set Your Target</p>
+                <p className="text-muted-foreground text-xs mt-1">
+                  Choose a token, target price, and trigger condition (above/below).
+                </p>
+              </div>
             </div>
-            <div>
-              <p className="font-medium text-white">Set Your Target</p>
-              <p className="text-muted-foreground text-xs mt-1">
-                Choose a token, target price, and trigger condition (above/below).
-              </p>
+            <div className="flex items-start gap-3">
+              <div className="w-6 h-6 rounded-full bg-orange-500/20 flex items-center justify-center text-orange-400 font-bold text-xs shrink-0">
+                2
+              </div>
+              <div>
+                <p className="font-medium text-white">Auto-Monitoring</p>
+                <p className="text-muted-foreground text-xs mt-1">
+                  Our system continuously monitors prices and detects when conditions are met.
+                </p>
+              </div>
             </div>
-          </div>
-          <div className="flex items-start gap-3">
-            <div className="w-6 h-6 rounded-full bg-orange-500/20 flex items-center justify-center text-orange-400 font-bold text-xs shrink-0">
-              2
-            </div>
-            <div>
-              <p className="font-medium text-white">Auto-Monitoring</p>
-              <p className="text-muted-foreground text-xs mt-1">
-                Our system continuously monitors prices and detects when conditions are met.
-              </p>
-            </div>
-          </div>
-          <div className="flex items-start gap-3">
-            <div className="w-6 h-6 rounded-full bg-orange-500/20 flex items-center justify-center text-orange-400 font-bold text-xs shrink-0">
-              3
-            </div>
-            <div>
-              <p className="font-medium text-white">Instant Execution</p>
-              <p className="text-muted-foreground text-xs mt-1">
-                When triggered, orders execute automatically via Jupiter with optimal routing.
-              </p>
+            <div className="flex items-start gap-3">
+              <div className="w-6 h-6 rounded-full bg-orange-500/20 flex items-center justify-center text-orange-400 font-bold text-xs shrink-0">
+                3
+              </div>
+              <div>
+                <p className="font-medium text-white">Instant Execution</p>
+                <p className="text-muted-foreground text-xs mt-1">
+                  When triggered, orders execute automatically via Jupiter with optimal routing.
+                </p>
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Main Content */}
+      {connected && (
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Orders List */}
         <div className="lg:col-span-2">
@@ -307,7 +310,8 @@ export default function LimitOrdersPage() {
             </div>
           </div>
         </div>
-      </div>}
+      </div>
+      )}
     </div>
   );
 }
