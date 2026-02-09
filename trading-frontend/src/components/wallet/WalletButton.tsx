@@ -2,7 +2,6 @@
 
 import { FC, useState, useCallback, useEffect } from "react";
 import { useWallet, useConnection } from "@solana/wallet-adapter-react";
-import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 import { LAMPORTS_PER_SOL } from "@solana/web3.js";
 import {
   Wallet,
@@ -15,6 +14,7 @@ import {
 } from "lucide-react";
 import { truncateAddress } from "@/lib/walletAuth";
 import { cn } from "@/lib/utils";
+import { useCustomWalletModal } from "@/components/providers/CustomWalletModalProvider";
 
 interface WalletButtonProps {
   className?: string;
@@ -23,7 +23,7 @@ interface WalletButtonProps {
 export const WalletButton: FC<WalletButtonProps> = ({ className }) => {
   const { publicKey, wallet, disconnect, connected, wallets, select, connecting } = useWallet();
   const { connection } = useConnection();
-  const { setVisible, visible } = useWalletModal();
+  const { setVisible: setShowWalletModal } = useCustomWalletModal();
   const [error, setError] = useState<string | null>(null);
 
   const [balance, setBalance] = useState<number | null>(null);
@@ -66,15 +66,14 @@ export const WalletButton: FC<WalletButtonProps> = ({ className }) => {
     const installedWallets = wallets.filter(w => w.readyState === "Installed" || w.readyState === "Loadable");
 
     if (installedWallets.length === 0) {
-      // No wallets installed - show modal anyway (it will show install options)
       console.log("[Wallet] No wallets detected, showing modal with install options");
     } else {
       console.log("[Wallet] Detected wallets:", installedWallets.map(w => w.adapter.name));
     }
 
-    // Open the wallet modal
-    setVisible(true);
-  }, [setVisible, wallets]);
+    // Open our custom wallet modal
+    setShowWalletModal(true);
+  }, [wallets]);
 
   const handleDisconnect = useCallback(async () => {
     await disconnect();

@@ -5,16 +5,13 @@ import {
   ConnectionProvider,
   WalletProvider,
 } from "@solana/wallet-adapter-react";
-import { WalletModalProvider } from "@solana/wallet-adapter-react-ui";
 import {
   PhantomWalletAdapter,
   SolflareWalletAdapter,
 } from "@solana/wallet-adapter-wallets";
 import { clusterApiUrl } from "@solana/web3.js";
 import { WalletError } from "@solana/wallet-adapter-base";
-
-// Import wallet adapter styles
-import "@solana/wallet-adapter-react-ui/styles.css";
+import { CustomWalletModalProvider } from "./CustomWalletModalProvider";
 
 interface SolanaWalletProviderProps {
   children: ReactNode;
@@ -36,8 +33,18 @@ export const SolanaWalletProvider: FC<SolanaWalletProviderProps> = ({
     return rpcUrl || clusterApiUrl("mainnet-beta");
   }, []);
 
+  // Connection config for better reliability
+  const connectionConfig = useMemo(
+    () => ({
+      commitment: "confirmed" as const,
+      wsEndpoint: undefined, // Disable WebSocket to avoid connection issues
+    }),
+    []
+  );
+
   // Configure supported wallets
-  // Note: Additional wallets are auto-detected via Wallet Standard
+  // Only include Phantom and Solflare - they have native Solana support
+  // MetaMask doesn't natively support Solana (only via Snaps which is experimental)
   const wallets = useMemo(
     () => [
       new PhantomWalletAdapter(),
@@ -66,13 +73,13 @@ export const SolanaWalletProvider: FC<SolanaWalletProviderProps> = ({
   }
 
   return (
-    <ConnectionProvider endpoint={endpoint}>
+    <ConnectionProvider endpoint={endpoint} config={connectionConfig}>
       <WalletProvider
         wallets={wallets}
-        autoConnect
+        autoConnect={false}
         onError={onError}
       >
-        <WalletModalProvider>{children}</WalletModalProvider>
+        <CustomWalletModalProvider>{children}</CustomWalletModalProvider>
       </WalletProvider>
     </ConnectionProvider>
   );
