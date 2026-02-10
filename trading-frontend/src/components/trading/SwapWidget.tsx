@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 import { VersionedTransaction } from '@solana/web3.js';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowDownUp,
   Loader2,
@@ -12,9 +12,15 @@ import {
   ExternalLink,
   Wallet,
   RefreshCw,
-  Shield
+  Shield,
+  Brain,
+  TrendingUp,
+  TrendingDown,
+  Eye,
+  Sparkles
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useTokenAnalysis, type TokenAnalysisResult } from '@/lib/useTokenAnalysis';
 
 const GATEWAY_URL = process.env.NEXT_PUBLIC_GATEWAY_URL || 'http://localhost:4000';
 
@@ -39,9 +45,44 @@ interface QuoteData {
 
 type SwapStatus = 'idle' | 'quoting' | 'ready' | 'signing' | 'sending' | 'confirming' | 'success' | 'error';
 
+// AI Analysis result display config
+const signalConfig: Record<string, { color: string; bg: string; icon: React.ReactNode; label: string }> = {
+  strong_buy: {
+    color: 'text-green-400',
+    bg: 'bg-green-500/20 border-green-500/30',
+    icon: <TrendingUp className="h-4 w-4 text-green-400" />,
+    label: 'Strong Buy',
+  },
+  buy: {
+    color: 'text-emerald-400',
+    bg: 'bg-emerald-500/20 border-emerald-500/30',
+    icon: <TrendingUp className="h-4 w-4 text-emerald-400" />,
+    label: 'Buy',
+  },
+  watch: {
+    color: 'text-yellow-400',
+    bg: 'bg-yellow-500/20 border-yellow-500/30',
+    icon: <Eye className="h-4 w-4 text-yellow-400" />,
+    label: 'Watch',
+  },
+  avoid: {
+    color: 'text-orange-400',
+    bg: 'bg-orange-500/20 border-orange-500/30',
+    icon: <AlertCircle className="h-4 w-4 text-orange-400" />,
+    label: 'Avoid',
+  },
+  sell: {
+    color: 'text-red-400',
+    bg: 'bg-red-500/20 border-red-500/30',
+    icon: <TrendingDown className="h-4 w-4 text-red-400" />,
+    label: 'Sell',
+  },
+};
+
 export function SwapWidget() {
   const { publicKey, signTransaction, connected } = useWallet();
   const { connection } = useConnection();
+  const { analyze, isAnalyzing, result: aiResult, clearResult } = useTokenAnalysis();
 
   const [inputToken, setInputToken] = useState(TOKENS[0]); // SOL
   const [outputToken, setOutputToken] = useState(TOKENS[1]); // USDC
@@ -51,6 +92,7 @@ export function SwapWidget() {
   const [error, setError] = useState<string | null>(null);
   const [txSignature, setTxSignature] = useState<string | null>(null);
   const [slippageBps, setSlippageBps] = useState(50); // 0.5%
+  const [showAiPanel, setShowAiPanel] = useState(false);
 
   // Fetch quote when input changes
   const fetchQuote = useCallback(async () => {
@@ -199,6 +241,26 @@ export function SwapWidget() {
     setOutputToken(temp);
     setInputAmount('');
     setQuote(null);
+    clearResult();
+  };
+
+  // AI Analysis handler
+  const handleAiAnalysis = async () => {
+    if (!quote) return;
+
+    const rate = parseFloat(quote.outputAmount) / parseFloat(inputAmount);
+
+    await analyze({
+      symbol: outputToken.symbol,
+      mint: outputToken.mint,
+      currentPrice: rate,
+      // In a real implementation, these would come from a price API
+      priceChange24h: Math.random() * 20 - 10, // Simulated
+      volume24h: Math.random() * 1000000, // Simulated
+      liquidity: 50000, // Simulated
+    });
+
+    setShowAiPanel(true);
   };
 
   const isLoading = ['quoting', 'signing', 'sending', 'confirming'].includes(status);
@@ -345,6 +407,107 @@ export function SwapWidget() {
           ))}
         </div>
       </div>
+
+      {/* AI Analysis Button */}
+      {quote && connected && (
+        <button
+          onClick={handleAiAnalysis}
+          disabled={isAnalyzing}
+          className="mt-4 w-full py-3 rounded-xl bg-purple-500/20 border border-purple-500/30 text-purple-400 font-medium flex items-center justify-center gap-2 hover:bg-purple-500/30 transition-all disabled:opacity-50"
+        >
+          {isAnalyzing ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Analyzing...
+            </>
+          ) : (
+            <>
+              <Brain className="h-4 w-4" />
+              Analyze with AI
+              <Sparkles className="h-3 w-3" />
+            </>
+          )}
+        </button>
+      )}
+
+      {/* AI Analysis Result Panel */}
+      <AnimatePresence>
+        {showAiPanel && aiResult && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="mt-4 overflow-hidden"
+          >
+            <div className={cn(
+              "p-4 rounded-xl border",
+              signalConfig[aiResult.signal]?.bg || signalConfig.watch.bg
+            )}>
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <Brain className="h-5 w-5 text-purple-400" />
+                  <span className="font-semibold text-white">AI Analysis</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  {signalConfig[aiResult.signal]?.icon}
+                  <span className={cn(
+                    "text-sm font-bold uppercase",
+                    signalConfig[aiResult.signal]?.color || 'text-zinc-400'
+                  )}>
+                    {signalConfig[aiResult.signal]?.label || aiResult.signal}
+                  </span>
+                </div>
+              </div>
+
+              <p className="text-sm text-zinc-300 leading-relaxed mb-3">
+                {aiResult.reasoning}
+              </p>
+
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-zinc-500">Confidence</span>
+                <div className="flex items-center gap-2">
+                  <div className="h-1.5 w-20 bg-zinc-800 rounded-full overflow-hidden">
+                    <motion.div
+                      initial={{ width: 0 }}
+                      animate={{ width: `${aiResult.confidence}%` }}
+                      transition={{ duration: 0.5 }}
+                      className={cn(
+                        "h-full",
+                        aiResult.confidence >= 70 ? 'bg-purple-500' :
+                        aiResult.confidence >= 50 ? 'bg-purple-400' : 'bg-purple-300'
+                      )}
+                    />
+                  </div>
+                  <span className={signalConfig[aiResult.signal]?.color || 'text-zinc-400'}>
+                    {aiResult.confidence}%
+                  </span>
+                </div>
+              </div>
+
+              {aiResult.risk && (
+                <div className="mt-3 p-2 rounded-lg bg-black/30 text-xs">
+                  <span className="text-orange-400 font-medium">Risk: </span>
+                  <span className="text-zinc-400">{aiResult.risk}</span>
+                </div>
+              )}
+
+              {aiResult.strategy && (
+                <div className="mt-2 p-2 rounded-lg bg-black/30 text-xs">
+                  <span className="text-cyan-400 font-medium">Strategy: </span>
+                  <span className="text-zinc-400">{aiResult.strategy}</span>
+                </div>
+              )}
+
+              <button
+                onClick={() => setShowAiPanel(false)}
+                className="mt-3 text-xs text-zinc-500 hover:text-zinc-300"
+              >
+                Dismiss
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Error Message */}
       {error && (
