@@ -18,8 +18,11 @@ import type {
   AdapterHealth,
   GodWallet,
   GodWalletBuy,
-  WhaleSignal,
+  OpusXWhaleSignal,
 } from './types.js';
+
+// Re-export for backward compatibility
+export type WhaleSignal = OpusXWhaleSignal;
 
 export interface OpusXAdapterConfig extends AdapterConfig {
   wsUrl?: string;
