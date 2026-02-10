@@ -4,13 +4,16 @@
  * Features from ClawdNet:
  * - Agent discovery registry
  * - A2A protocol communication
- * - X402 USDC payments
+ * - X402 USDC payments (Base network)
  * - Reputation system
  * - Multi-agent workflows
  */
 
 import axios, { AxiosInstance } from 'axios';
 import { EventEmitter } from 'events';
+import { createWalletClient, createPublicClient, http, parseUnits, encodeFunctionData } from 'viem';
+import { privateKeyToAccount } from 'viem/accounts';
+import { base } from 'viem/chains';
 import type {
   AdapterConfig,
   AdapterHealth,
@@ -19,22 +22,44 @@ import type {
   X402PaymentRequest,
 } from './types.js';
 
+// USDC contract on Base
+const USDC_ADDRESS = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' as const;
+
+// ERC-20 Transfer ABI
+const ERC20_TRANSFER_ABI = [
+  {
+    name: 'transfer',
+    type: 'function',
+    inputs: [
+      { name: 'to', type: 'address' },
+      { name: 'amount', type: 'uint256' },
+    ],
+    outputs: [{ name: '', type: 'bool' }],
+  },
+] as const;
+
 export interface ClawdnetAdapterConfig extends AdapterConfig {
   agentId?: string;
   agentHandle?: string;
   agentEndpoint?: string;
   privateKey?: string;
+  rpcUrl?: string;
 }
 
 export class ClawdnetAdapter extends EventEmitter {
   private client: AxiosInstance;
   private config: ClawdnetAdapterConfig;
   private health: AdapterHealth = { healthy: false, lastChecked: 0 };
+  private walletClient: any = null;  // viem WalletClient
+  private publicClient: any = null;  // viem PublicClient
+  private walletAddress: string | null = null;
+  private account: any = null;       // viem Account
 
   constructor(config: ClawdnetAdapterConfig) {
     super();
     this.config = {
       timeout: 30000,
+      rpcUrl: 'https://mainnet.base.org',
       ...config,
     };
 
@@ -46,6 +71,55 @@ export class ClawdnetAdapter extends EventEmitter {
         ...(this.config.apiKey && { Authorization: `Bearer ${this.config.apiKey}` }),
       },
     });
+
+    // Initialize wallet if private key is provided
+    if (this.config.privateKey) {
+      this.initializeWallet(this.config.privateKey);
+    }
+  }
+
+  /**
+   * Initialize viem wallet for X402 payments
+   */
+  private initializeWallet(privateKey: string): void {
+    try {
+      const formattedKey = privateKey.startsWith('0x') ? privateKey : `0x${privateKey}`;
+      this.account = privateKeyToAccount(formattedKey as `0x${string}`);
+
+      this.walletClient = createWalletClient({
+        account: this.account,
+        chain: base,
+        transport: http(this.config.rpcUrl),
+      });
+
+      this.publicClient = createPublicClient({
+        chain: base,
+        transport: http(this.config.rpcUrl),
+      });
+
+      this.walletAddress = this.account.address;
+      console.log(`[ClawdnetAdapter] Wallet initialized: ${this.walletAddress}`);
+    } catch (error) {
+      console.error('[ClawdnetAdapter] Failed to initialize wallet:', error);
+      this.walletClient = null;
+      this.publicClient = null;
+      this.account = null;
+    }
+  }
+
+  /**
+   * Set wallet private key for X402 payments
+   */
+  setWalletPrivateKey(privateKey: string): void {
+    this.config.privateKey = privateKey;
+    this.initializeWallet(privateKey);
+  }
+
+  /**
+   * Get wallet address
+   */
+  getWalletAddress(): string | null {
+    return this.walletAddress;
   }
 
   // ==================== Agent Registration ====================
@@ -292,20 +366,129 @@ export class ClawdnetAdapter extends EventEmitter {
   // ==================== X402 Payments ====================
 
   /**
-   * Execute X402 payment
+   * Execute X402 payment on Base network using USDC
    */
   async executeX402Payment(payment: X402PaymentRequest): Promise<{
     success: boolean;
     txHash?: string;
     error?: string;
   }> {
-    // X402 payment requires external payment execution
-    // The actual implementation should use a wallet adapter to execute the payment
-    console.error('[ClawdnetAdapter] X402 payment execution not implemented - requires wallet integration');
-    return {
-      success: false,
-      error: 'X402 payment execution not implemented. Configure wallet integration to enable payments.',
-    };
+    if (!this.walletClient || !this.publicClient) {
+      return {
+        success: false,
+        error: 'Wallet not initialized. Set private key via setWalletPrivateKey() or constructor config.',
+      };
+    }
+
+    if (!payment.recipientAddress || !payment.amount) {
+      return {
+        success: false,
+        error: 'Invalid payment request: missing recipientAddress or amount',
+      };
+    }
+
+    try {
+      // Parse the amount (USDC has 6 decimals)
+      const decimals = payment.currency === 'USDC' ? 6 : 18;
+      const amountInSmallestUnit = parseUnits(payment.amount, decimals);
+
+      // Determine if this is a USDC transfer or native ETH
+      const isUSDC = payment.currency === 'USDC' || payment.asset === 'USDC';
+
+      let txHash: `0x${string}`;
+
+      if (isUSDC) {
+        // ERC-20 USDC transfer
+        const data = encodeFunctionData({
+          abi: ERC20_TRANSFER_ABI,
+          functionName: 'transfer',
+          args: [payment.recipientAddress as `0x${string}`, amountInSmallestUnit],
+        });
+
+        txHash = await this.walletClient.sendTransaction({
+          account: this.account,
+          to: USDC_ADDRESS,
+          data,
+          chain: base,
+        });
+      } else {
+        // Native ETH transfer
+        txHash = await this.walletClient.sendTransaction({
+          account: this.account,
+          to: payment.recipientAddress as `0x${string}`,
+          value: amountInSmallestUnit,
+          chain: base,
+        });
+      }
+
+      console.log(`[ClawdnetAdapter] X402 payment sent: ${txHash}`);
+
+      // Wait for confirmation
+      const receipt = await this.publicClient.waitForTransactionReceipt({
+        hash: txHash,
+        confirmations: 1,
+      });
+
+      if (receipt.status === 'success') {
+        console.log(`[ClawdnetAdapter] X402 payment confirmed: ${receipt.transactionHash}`);
+        this.emit('x402_payment_completed', {
+          txHash: receipt.transactionHash,
+          amount: payment.amount,
+          currency: payment.currency,
+          recipient: payment.recipientAddress,
+        });
+
+        return {
+          success: true,
+          txHash: receipt.transactionHash,
+        };
+      } else {
+        return {
+          success: false,
+          txHash: receipt.transactionHash,
+          error: 'Transaction reverted',
+        };
+      }
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      console.error('[ClawdnetAdapter] X402 payment failed:', errorMsg);
+      return {
+        success: false,
+        error: `Payment failed: ${errorMsg}`,
+      };
+    }
+  }
+
+  /**
+   * Check USDC balance for X402 payments
+   */
+  async getUSDCBalance(): Promise<string | null> {
+    if (!this.publicClient || !this.walletAddress) {
+      return null;
+    }
+
+    try {
+      const balance = await this.publicClient.readContract({
+        address: USDC_ADDRESS,
+        abi: [
+          {
+            name: 'balanceOf',
+            type: 'function',
+            inputs: [{ name: 'account', type: 'address' }],
+            outputs: [{ name: '', type: 'uint256' }],
+          },
+        ],
+        functionName: 'balanceOf',
+        args: [this.walletAddress as `0x${string}`],
+      });
+
+      // USDC has 6 decimals
+      const formattedBalance = (Number(balance) / 1e6).toFixed(2);
+      return formattedBalance;
+    } catch (error) {
+      console.error('[ClawdnetAdapter] Failed to get USDC balance:', error);
+      return null;
+    }
   }
 
   /**
