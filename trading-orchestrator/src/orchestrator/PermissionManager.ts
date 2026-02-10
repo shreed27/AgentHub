@@ -40,7 +40,30 @@ export class PermissionManager {
     /**
      * Check if a trade intent is permitted
      */
-    checkPermission(intent: TradeIntent, permission: WalletPermission): PermissionCheck {
+    checkPermission(permissionIdOrIntent: string | TradeIntent, permissionOrAction?: WalletPermission | { type: string; value: number }): PermissionCheck | boolean {
+        // Handle simple permission check with ID
+        if (typeof permissionIdOrIntent === 'string' && permissionOrAction && 'type' in permissionOrAction) {
+            const permission = this.permissions.get(permissionIdOrIntent);
+            if (!permission || !permission.isActive) {
+                return false;
+            }
+            if (Date.now() > permission.expiresAt) {
+                return false;
+            }
+            const actionAllowed = this.isActionAllowed(permissionOrAction.type.toLowerCase(), permission.allowedActions);
+            if (!actionAllowed) {
+                return false;
+            }
+            if (permissionOrAction.value > permission.limits.maxTransactionValue) {
+                return false;
+            }
+            return true;
+        }
+
+        // Handle full TradeIntent check
+        const intent = permissionIdOrIntent as TradeIntent;
+        const permission = permissionOrAction as WalletPermission;
+
         // Check if permission is active
         if (!permission.isActive) {
             return {
@@ -57,31 +80,37 @@ export class PermissionManager {
             };
         }
 
+        // Get action from intent (use side if action is not set)
+        const action = intent.action?.toString() || intent.side || 'buy';
+
         // Check if action is allowed
-        const actionAllowed = this.isActionAllowed(intent.action, permission.allowedActions);
+        const actionAllowed = this.isActionAllowed(action, permission.allowedActions);
         if (!actionAllowed) {
             return {
                 permitted: false,
-                reason: `Action '${intent.action}' is not permitted`
+                reason: `Action '${action}' is not permitted`
             };
         }
 
+        // Get amount from intent (use size * price if amount is not set)
+        const amount = intent.amount || (intent.size * intent.price);
+
         // Check transaction value limit
-        if (intent.amount > permission.limits.maxTransactionValue) {
+        if (amount > permission.limits.maxTransactionValue) {
             return {
                 permitted: false,
-                reason: `Transaction amount ${intent.amount} exceeds limit ${permission.limits.maxTransactionValue}`
+                reason: `Transaction amount ${amount} exceeds limit ${permission.limits.maxTransactionValue}`
             };
         }
 
         // Check daily limit
-        const dailyCheck = this.checkDailyLimit(permission.id, intent.amount, permission.limits.dailyLimit);
+        const dailyCheck = this.checkDailyLimit(permission.id, amount, permission.limits.dailyLimit);
         if (!dailyCheck.permitted) {
             return dailyCheck;
         }
 
         // Check weekly limit
-        const weeklyCheck = this.checkWeeklyLimit(permission.id, intent.amount, permission.limits.weeklyLimit);
+        const weeklyCheck = this.checkWeeklyLimit(permission.id, amount, permission.limits.weeklyLimit);
         if (!weeklyCheck.permitted) {
             return weeklyCheck;
         }
@@ -89,7 +118,7 @@ export class PermissionManager {
         // Check if manual approval is required
         if (permission.limits.requiresApproval) {
             const threshold = permission.limits.approvalThreshold || 0;
-            if (intent.amount > threshold) {
+            if (amount > threshold) {
                 return {
                     permitted: false,
                     reason: 'Manual approval required for this transaction',
