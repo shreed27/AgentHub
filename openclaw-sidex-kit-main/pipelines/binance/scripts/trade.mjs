@@ -2,7 +2,6 @@ import { parseArgs } from 'util';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
-// import { fetch } from 'node-fetch'; // Standard in Node 18+
 
 const { values } = parseArgs({
     options: {
@@ -34,24 +33,50 @@ function signature(query, secret) {
     return crypto.createHmac('sha256', secret).update(query).digest('hex');
 }
 
+async function setLeverage(symbolName, leverageValue) {
+    const timestamp = Date.now();
+    const queryParams = `symbol=${symbolName}&leverage=${leverageValue}&timestamp=${timestamp}`;
+    const sig = signature(queryParams, api_secret);
+    const signedQuery = `${queryParams}&signature=${sig}`;
+
+    const res = await fetch(`${BASE_URL}/fapi/v1/leverage`, {
+        method: 'POST',
+        headers: {
+            'X-MBX-APIKEY': api_key,
+            'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        body: signedQuery
+    });
+
+    const data = await res.json();
+    if (data.leverage) {
+        console.log(`✅ Leverage set to ${data.leverage}x for ${symbolName}`);
+    } else if (data.code) {
+        console.warn(`⚠️ Leverage warning: ${data.msg || data.code}`);
+    }
+    return data;
+}
+
 async function executeTrade() {
     try {
-        console.log(`✅ Pipeline: Preparing trade for ${symbol} ${side.toUpperCase()}`);
+        // Format symbol (remove slash if present)
+        const symbolName = symbol.replace('/', '').toUpperCase();
 
-        // 0. Set Leverage (Optional step in Binance, often required before order)
-        if (leverage) {
+        console.log(`✅ Pipeline: Preparing trade for ${symbolName} ${side.toUpperCase()}`);
+
+        // 0. Set Leverage (Required before order for futures)
+        if (leverage && parseInt(leverage) > 1) {
             console.log(`⚙️  Setting Leverage to ${leverage}x`);
-            // POST /fapi/v1/leverage logic here
+            await setLeverage(symbolName, parseInt(leverage));
         }
 
         // 1. Prepare Order Payload
         const timestamp = Date.now();
         const queryParams = [
-            `symbol=${symbol.replace('/', '')}`, // Binance format BTCUSDT, not BTC/USDT
+            `symbol=${symbolName}`,
             `side=${side.toUpperCase()}`,
             `type=MARKET`,
             `quantity=${amount}`,
-            // `reduceOnly=false`,
             `timestamp=${timestamp}`
         ].join('&');
 
@@ -60,34 +85,65 @@ async function executeTrade() {
 
         console.log(`🚀 Sending Signed Order to Binance Futures API`);
         console.log(`   Endpoint: ${BASE_URL}/fapi/v1/order`);
-        console.log(`   Payload: ${queryParams}`);
+        console.log(`   Symbol: ${symbolName}, Side: ${side.toUpperCase()}, Amount: ${amount}`);
 
-        // Mock Fetch for Pipeline Structure
-        // const res = await fetch(`${BASE_URL}/fapi/v1/order?${signedQuery}`, {
-        //     method: 'POST',
-        //     headers: { 'X-MBX-APIKEY': api_key }
-        // });
+        // Execute REAL order
+        const res = await fetch(`${BASE_URL}/fapi/v1/order`, {
+            method: 'POST',
+            headers: {
+                'X-MBX-APIKEY': api_key,
+                'Content-Type': 'application/x-www-form-urlencoded'
+            },
+            body: signedQuery
+        });
 
-        const mockResponse = {
-            status: "FILLED",
-            orderId: 123456789,
-            symbol: symbol.replace('/', ''),
-            executedQty: amount,
-            avgPrice: "50000.00",
-            cumQuote: "500.00"
-        };
+        const response = await res.json();
 
-        console.log('✅ Trade Executed Successfully (Mock)');
+        fs.appendFileSync(DEBUG_LOG, `${new Date().toISOString()} - Response: ${JSON.stringify(response)}\n`);
 
-        // Log trade locally
+        if (response.orderId) {
+            console.log('✅ Trade Executed Successfully!');
+            console.log(`   Order ID: ${response.orderId}`);
+            console.log(`   Status: ${response.status}`);
+            console.log(`   Executed Qty: ${response.executedQty}`);
+            console.log(`   Avg Price: ${response.avgPrice}`);
+        } else if (response.code) {
+            console.error(`❌ Binance Error ${response.code}: ${response.msg}`);
+
+            // Log trade locally even on failure for debugging
+            const logEntry = {
+                timestamp: new Date().toISOString(),
+                exchange: 'binance',
+                symbol: symbolName,
+                side,
+                amount: parseFloat(amount),
+                leverage: parseFloat(leverage || 1),
+                error: response
+            };
+
+            const logPath = path.join(path.dirname(process.argv[1]), '..', '..', '..', 'trades.json');
+            try {
+                fs.appendFileSync(logPath, JSON.stringify(logEntry) + '\n');
+            } catch (e) { }
+
+            process.exit(1);
+        }
+
+        // Log successful trade
         const logEntry = {
             timestamp: new Date().toISOString(),
             exchange: 'binance',
-            symbol,
+            symbol: symbolName,
             side,
             amount: parseFloat(amount),
             leverage: parseFloat(leverage || 1),
-            result: mockResponse
+            result: {
+                orderId: response.orderId,
+                status: response.status,
+                executedQty: response.executedQty,
+                avgPrice: response.avgPrice,
+                cumQuote: response.cumQuote
+            }
         };
 
         const logPath = path.join(path.dirname(process.argv[1]), '..', '..', '..', 'trades.json');
@@ -95,8 +151,12 @@ async function executeTrade() {
             fs.appendFileSync(logPath, JSON.stringify(logEntry) + '\n');
         } catch (e) { }
 
+        // Output for programmatic use
+        console.log(JSON.stringify({ success: true, ...logEntry.result }));
+
     } catch (error) {
-        console.error("Pipeline Error:", error);
+        console.error("Pipeline Error:", error.message);
+        fs.appendFileSync(DEBUG_LOG, `${new Date().toISOString()} - Error: ${error.message}\n`);
         process.exit(1);
     }
 }
