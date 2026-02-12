@@ -5,7 +5,7 @@ import { motion } from 'framer-motion';
 import { Shield, AlertTriangle, TrendingUp, Snowflake, Activity, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import api from '@/lib/api';
-import { useWallet } from '@solana/wallet-adapter-react';
+import { useWallet } from '@/hooks/useWalletCompat';
 
 type SurvivalState = 'growth' | 'normal' | 'defensive' | 'critical' | 'hibernation';
 
@@ -77,11 +77,20 @@ const stateConfig: Record<SurvivalState, {
 };
 
 export function SurvivalModeIndicator() {
-  const { publicKey, connected } = useWallet();
   const [data, setData] = useState<SurvivalData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [mounted, setMounted] = useState(false);
 
+  // Get wallet from Solana wallet adapter
+  const { publicKey, connected } = useWallet();
+
+  // Check if mounted for SSR safety
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Use connected wallet address or null
   const walletAddress = connected && publicKey ? publicKey.toBase58() : null;
 
   useEffect(() => {

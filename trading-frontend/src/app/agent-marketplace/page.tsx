@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import api from "@/lib/api";
-import { useWallet } from "@solana/wallet-adapter-react";
+import { useWallet } from "@/hooks/useWalletCompat";
 import { useCustomWalletModal } from "@/components/providers/CustomWalletModalProvider";
 
 interface Agent {
@@ -91,17 +91,17 @@ export default function AgentMarketplacePage() {
             ]);
 
             if (agentsRes.success) {
-                let filteredAgents = agentsRes.data || [];
+                let filteredAgents: Agent[] = (agentsRes.data as Agent[]) || [];
                 if (searchQuery) {
-                    filteredAgents = filteredAgents.filter((a: Agent) =>
+                    filteredAgents = filteredAgents.filter((a) =>
                         a.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                         a.description.toLowerCase().includes(searchQuery.toLowerCase())
                     );
                 }
                 setAgents(filteredAgents);
             }
-            if (subsRes.success) setSubscriptions(subsRes.data || []);
-            if (statsRes.success) setStats(statsRes.data);
+            if (subsRes.success) setSubscriptions((subsRes.data as AgentSubscription[]) || []);
+            if (statsRes.success) setStats(statsRes.data as NetworkStats);
         } catch (error) {
             console.error('Error loading marketplace data:', error);
         } finally {
@@ -361,7 +361,7 @@ export default function AgentMarketplacePage() {
                                         <span className={cn(
                                             "px-2 py-0.5 rounded text-xs",
                                             sub.status === 'active' ? "bg-green-500/20 text-green-400" :
-                                            "bg-gray-500/20 text-gray-400"
+                                                "bg-gray-500/20 text-gray-400"
                                         )}>
                                             {sub.status}
                                         </span>
@@ -402,7 +402,7 @@ export default function AgentMarketplacePage() {
                             animate={{ scale: 1, opacity: 1 }}
                             exit={{ scale: 0.95, opacity: 0 }}
                             className="bg-background border border-white/10 rounded-xl p-6 w-full max-w-md"
-                            onClick={(e) => e.stopPropagation()}
+                            onClick={(e: React.MouseEvent) => e.stopPropagation()}
                         >
                             <div className="flex items-center justify-between mb-6">
                                 <h2 className="text-xl font-bold">Hire {selectedAgent.name}</h2>

@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Wallet, FileText, ArrowLeftRight, RefreshCcw, DollarSign, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import dynamic from "next/dynamic";
-import { useWallet } from "@solana/wallet-adapter-react";
+import { useWallet } from "@/hooks/useWalletCompat";
 import { useCustomWalletModal } from "@/components/providers/CustomWalletModalProvider";
 
 const HoldingsTab = dynamic(() => import("./tabs/HoldingsTab"), { ssr: false });

@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import api from "@/lib/api";
-import { useWallet } from "@solana/wallet-adapter-react";
+import { useWallet } from "@/hooks/useWalletCompat";
 import { useCustomWalletModal } from "@/components/providers/CustomWalletModalProvider";
 
 interface EVMChain {
@@ -126,9 +126,9 @@ export default function EVMPage() {
                 api.get('/evm/bridge', { wallet: userWallet }),
             ]);
 
-            if (walletsRes.success) setWallets(walletsRes.data || []);
-            if (balancesRes.success) setBalances(balancesRes.data || []);
-            if (bridgesRes.success) setBridges(bridgesRes.data || []);
+            if (walletsRes.success && walletsRes.data) setWallets(walletsRes.data as EVMWallet[]);
+            if (balancesRes.success && balancesRes.data) setBalances(balancesRes.data as EVMBalance[]);
+            if (bridgesRes.success && bridgesRes.data) setBridges(Array.isArray(bridgesRes.data) ? bridgesRes.data as BridgeTransaction[] : []);
         } catch (error) {
             console.error('Error loading EVM data:', error);
         } finally {
@@ -164,8 +164,8 @@ export default function EVMPage() {
                 swapForm.tokenOut,
                 swapForm.amountIn
             );
-            if (result.success) {
-                setSwapQuote(result.data);
+            if (result.success && result.data) {
+                setSwapQuote(result.data as SwapQuote);
             }
         } catch (error) {
             console.error('Error getting quote:', error);
@@ -173,11 +173,11 @@ export default function EVMPage() {
     };
 
     const executeSwap = async () => {
-        if (!swapQuote || wallets.length === 0) return;
+        if (!swapQuote || wallets.length === 0 || !userWallet) return;
 
         try {
             await api.executeEVMSwap({
-                userWallet,
+                userWallet: userWallet,
                 evmAddress: wallets[0].evmAddress,
                 chain: selectedChain.id,
                 tokenIn: swapForm.tokenIn,
@@ -194,11 +194,11 @@ export default function EVMPage() {
     };
 
     const initiateBridge = async () => {
-        if (wallets.length === 0) return;
+        if (wallets.length === 0 || !userWallet) return;
 
         try {
             await api.initiateBridge({
-                userWallet,
+                userWallet: userWallet,
                 sourceChain: bridgeForm.sourceChain,
                 targetChain: bridgeForm.targetChain,
                 sourceAddress: wallets[0].evmAddress,
@@ -469,7 +469,7 @@ export default function EVMPage() {
                             animate={{ scale: 1, opacity: 1 }}
                             exit={{ scale: 0.95, opacity: 0 }}
                             className="bg-background border border-white/10 rounded-xl p-6 w-full max-w-md"
-                            onClick={(e) => e.stopPropagation()}
+                            onClick={(e: React.MouseEvent) => e.stopPropagation()}
                         >
                             <div className="flex items-center justify-between mb-6">
                                 <h2 className="text-xl font-bold">Add EVM Wallet</h2>
@@ -551,7 +551,7 @@ export default function EVMPage() {
                             animate={{ scale: 1, opacity: 1 }}
                             exit={{ scale: 0.95, opacity: 0 }}
                             className="bg-background border border-white/10 rounded-xl p-6 w-full max-w-md"
-                            onClick={(e) => e.stopPropagation()}
+                            onClick={(e: React.MouseEvent) => e.stopPropagation()}
                         >
                             <div className="flex items-center justify-between mb-6">
                                 <h2 className="text-xl font-bold">Swap Tokens</h2>
@@ -668,7 +668,7 @@ export default function EVMPage() {
                             animate={{ scale: 1, opacity: 1 }}
                             exit={{ scale: 0.95, opacity: 0 }}
                             className="bg-background border border-white/10 rounded-xl p-6 w-full max-w-md"
-                            onClick={(e) => e.stopPropagation()}
+                            onClick={(e: React.MouseEvent) => e.stopPropagation()}
                         >
                             <div className="flex items-center justify-between mb-6">
                                 <h2 className="text-xl font-bold">Bridge Assets</h2>

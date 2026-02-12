@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import api from "@/lib/api";
-import { useWallet } from "@solana/wallet-adapter-react";
+import { useWallet } from "@/hooks/useWalletCompat";
 import { useCustomWalletModal } from "@/components/providers/CustomWalletModalProvider";
 
 interface BacktestStrategy {
@@ -79,14 +79,15 @@ export default function BacktestPage() {
                 wallet ? api.getBacktestRuns(wallet) : Promise.resolve({ success: true, data: [] }),
             ]);
 
-            if (strategiesRes.success) {
-                setStrategies(strategiesRes.data || []);
-                if (strategiesRes.data?.length > 0 && !selectedStrategy) {
-                    setSelectedStrategy(strategiesRes.data[0].id);
+            if (strategiesRes.success && strategiesRes.data) {
+                const strategiesData = strategiesRes.data as BacktestStrategy[];
+                setStrategies(strategiesData);
+                if (strategiesData.length > 0 && !selectedStrategy) {
+                    setSelectedStrategy(strategiesData[0].id);
                 }
             }
-            if (runsRes.success) {
-                setRuns(runsRes.data || []);
+            if (runsRes.success && runsRes.data) {
+                setRuns(runsRes.data as BacktestRun[]);
             }
         } catch (error) {
             console.error('Error loading backtest data:', error);
@@ -103,34 +104,19 @@ export default function BacktestPage() {
             const strategy = strategies.find(s => s.id === selectedStrategy);
             const result = await api.createBacktestRun({
                 userWallet: wallet,
-                strategyId: selectedStrategy,
-                strategyName: strategy?.name || 'Unknown',
+                name: strategy?.name || 'Backtest Run',
+                strategy: selectedStrategy,
                 symbol,
                 startDate,
                 endDate,
                 initialCapital,
-                params: strategy?.defaultParams || '{}',
+                parameters: strategy?.defaultParams ? JSON.parse(strategy.defaultParams) : {},
             });
 
-            if (result.success) {
-                // Simulate backtest running
-                setTimeout(async () => {
-                    await api.simulateBacktest(result.data.id, {
-                        totalReturn: Math.random() * 5000 - 1000,
-                        totalReturnPercent: Math.random() * 100 - 20,
-                        maxDrawdown: Math.random() * 3000,
-                        maxDrawdownPercent: Math.random() * 30,
-                        sharpeRatio: Math.random() * 3,
-                        sortinoRatio: Math.random() * 4,
-                        winRate: 0.4 + Math.random() * 0.3,
-                        totalTrades: Math.floor(50 + Math.random() * 200),
-                        profitFactor: 1 + Math.random() * 2,
-                        avgWin: 50 + Math.random() * 100,
-                        avgLoss: 30 + Math.random() * 50,
-                    });
-                    loadData();
-                    setRunning(false);
-                }, 2000);
+            if (result.success && result.data) {
+                // The backend already returns results - no need to simulate
+                loadData();
+                setRunning(false);
             }
         } catch (error) {
             console.error('Error running backtest:', error);
@@ -142,8 +128,13 @@ export default function BacktestPage() {
         setSelectedRun(run);
         try {
             const res = await api.getBacktestResults(run.id);
-            if (res.success && res.data?.length > 0) {
-                setResults(res.data[0]);
+            if (res.success && res.data) {
+                const resultsData = res.data as BacktestResult | BacktestResult[];
+                if (Array.isArray(resultsData) && resultsData.length > 0) {
+                    setResults(resultsData[0]);
+                } else if (!Array.isArray(resultsData)) {
+                    setResults(resultsData);
+                }
             }
         } catch (error) {
             console.error('Error loading results:', error);

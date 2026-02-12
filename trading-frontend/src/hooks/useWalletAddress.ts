@@ -1,6 +1,6 @@
 'use client';
 
-import { useWallet } from '@solana/wallet-adapter-react';
+import { useWallet } from '@/hooks/useWalletCompat';
 import { useMemo } from 'react';
 
 /**

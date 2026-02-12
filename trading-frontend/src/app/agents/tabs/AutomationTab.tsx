@@ -54,8 +54,14 @@ export default function AutomationTab({ walletAddress }: AutomationTabProps) {
                 api.getAutomationRules(walletAddress),
                 api.getAutomationStats(walletAddress),
             ]);
-            if (rulesRes.success && rulesRes.data) setRules(rulesRes.data as AutomationRule[]);
-            if (statsRes.success && statsRes.data) setStats(statsRes.data as AutomationStats);
+            if (rulesRes.success && rulesRes.data) {
+                const rulesData = (rulesRes.data as { data?: AutomationRule[] })?.data || rulesRes.data;
+                setRules(Array.isArray(rulesData) ? rulesData : []);
+            }
+            if (statsRes.success && statsRes.data) {
+                const statsData = (statsRes.data as { data?: AutomationStats })?.data || statsRes.data;
+                setStats(statsData as AutomationStats);
+            }
         } catch (error) {
             console.error('Failed to load automation data:', error);
         } finally {

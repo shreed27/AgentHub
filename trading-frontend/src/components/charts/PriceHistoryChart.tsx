@@ -85,16 +85,35 @@ export function PriceHistoryChart({
       const startTime = endTime - candleCount * intervalMs[interval];
 
       const [historyRes, statsRes] = await Promise.all([
-        api.getPriceHistory(token, interval, startTime, endTime),
+        api.getPriceHistory(token, { interval }),
         api.getPriceStats(token),
       ]);
 
       if (historyRes.success && historyRes.data) {
-        setPriceData(historyRes.data as PriceCandle[]);
+        const rawData = historyRes.data as { data?: { candles?: PriceCandle[] }; candles?: PriceCandle[] } | PriceCandle[];
+        const candles = Array.isArray(rawData)
+          ? rawData
+          : 'data' in rawData && rawData.data?.candles
+            ? rawData.data.candles
+            : 'candles' in rawData && rawData.candles
+              ? rawData.candles
+              : [];
+        setPriceData(candles);
       }
 
       if (statsRes.success && statsRes.data) {
-        setStats(statsRes.data as PriceStats);
+        const rawData = statsRes.data as unknown;
+        const nested = rawData as { data?: Record<string, number> };
+        const statsObj = nested.data || rawData as Record<string, number>;
+        // Map API response fields to expected interface
+        setStats({
+          high24h: statsObj.high24h || statsObj.high || 0,
+          low24h: statsObj.low24h || statsObj.low || 0,
+          change24h: statsObj.change24h || statsObj.priceChange || 0,
+          changePercent24h: statsObj.changePercent24h || statsObj.priceChangePercent || 0,
+          volume24h: statsObj.volume24h || statsObj.totalVolume || 0,
+          avgPrice24h: statsObj.avgPrice24h || statsObj.avgPrice || 0,
+        });
       }
     } catch (error) {
       console.error("Failed to fetch price history:", error);
@@ -224,7 +243,7 @@ export function PriceHistoryChart({
                 tickLine={false}
                 tick={{ fill: "#666", fontSize: 10 }}
                 domain={["auto", "auto"]}
-                tickFormatter={(value) => formatPrice(value)}
+                tickFormatter={(value: number) => formatPrice(value)}
               />
               <Tooltip
                 contentStyle={{
@@ -234,7 +253,7 @@ export function PriceHistoryChart({
                   padding: "8px 12px",
                 }}
                 labelStyle={{ color: "#888", fontSize: 12 }}
-                formatter={(value: number) => [formatPrice(value), "Price"]}
+                formatter={(value) => [formatPrice(value as number), "Price"]}
               />
               <Area
                 type="monotone"

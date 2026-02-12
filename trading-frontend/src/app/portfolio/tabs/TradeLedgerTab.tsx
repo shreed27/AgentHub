@@ -73,10 +73,18 @@ export default function TradeLedgerTab({ walletAddress }: TradeLedgerTabProps) {
             ]);
 
             if (entriesRes.success && entriesRes.data) {
-                setEntries(entriesRes.data.entries as TradeEntry[]);
+                const rawData = entriesRes.data as { data?: { entries: TradeEntry[] }; entries?: TradeEntry[] } | { entries: TradeEntry[] };
+                const entries = 'data' in rawData && rawData.data?.entries
+                    ? rawData.data.entries
+                    : 'entries' in rawData && rawData.entries
+                        ? rawData.entries
+                        : [];
+                setEntries(entries);
             }
             if (statsRes.success && statsRes.data) {
-                setStats(statsRes.data as TradeStats);
+                const rawData = statsRes.data as { data?: TradeStats } | TradeStats;
+                const stats = 'data' in rawData && rawData.data ? rawData.data : rawData as TradeStats;
+                setStats(stats);
             }
         } catch (error) {
             console.error('Failed to load trade ledger:', error);

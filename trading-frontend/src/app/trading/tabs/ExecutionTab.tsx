@@ -59,47 +59,94 @@ export default function ExecutionTab() {
         };
     }, []);
 
+    // Generate order book based on real price with realistic market structure
     useEffect(() => {
         const generateBook = () => {
-            const newBids = Array.from({ length: 15 }).map((_, i) => ({
-                id: `bid-${i}`,
-                price: price - (i * 0.05) - (Math.random() * 0.02),
-                size: Math.random() * 10,
-                total: Math.random() * 100,
-                type: "bid" as const,
-                depth: Math.random() * 60 + 10
-            }));
-            const newAsks = Array.from({ length: 15 }).map((_, i) => ({
-                id: `ask-${i}`,
-                price: price + (i * 0.05) + (Math.random() * 0.02),
-                size: Math.random() * 10,
-                total: Math.random() * 100,
-                type: "ask" as const,
-                depth: Math.random() * 60 + 10
-            }));
+            // Use realistic spread based on price (0.01% for SOL)
+            const spread = price * 0.0001;
+            const midPrice = price;
+
+            // Generate bids with realistic depth distribution
+            const newBids = Array.from({ length: 15 }).map((_, i) => {
+                const priceLevel = midPrice - spread - (i * price * 0.0005);
+                const baseSize = 50 / (i + 1);
+                const size = baseSize * (0.8 + Math.random() * 0.4);
+                return {
+                    id: `bid-${i}`,
+                    price: priceLevel,
+                    size: size,
+                    total: size * priceLevel,
+                    type: "bid" as const,
+                    depth: Math.min(80, 20 + (15 - i) * 4)
+                };
+            });
+
+            const newAsks = Array.from({ length: 15 }).map((_, i) => {
+                const priceLevel = midPrice + spread + (i * price * 0.0005);
+                const baseSize = 50 / (i + 1);
+                const size = baseSize * (0.8 + Math.random() * 0.4);
+                return {
+                    id: `ask-${i}`,
+                    price: priceLevel,
+                    size: size,
+                    total: size * priceLevel,
+                    type: "ask" as const,
+                    depth: Math.min(80, 20 + (15 - i) * 4)
+                };
+            });
+
             setBids(newBids);
             setAsks(newAsks.reverse());
         };
 
         generateBook();
-        const interval = setInterval(generateBook, 1500);
+        const interval = setInterval(generateBook, 2000);
         return () => clearInterval(interval);
     }, [price]);
 
+    // Listen for real trades from WebSocket and generate realistic simulated trades
     useEffect(() => {
-        const interval = setInterval(() => {
-            const isBuy = Math.random() > 0.5;
+        const socket = socketRef.current;
+
+        const handleTradeExecuted = (data: any) => {
             const newTrade = {
-                id: Math.random().toString(36),
+                id: data.id || Math.random().toString(36),
                 time: new Date().toLocaleTimeString([], { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" }),
-                price: price + (Math.random() - 0.5) * 0.1,
-                size: Math.random() * 5,
+                price: data.price || price,
+                size: data.amount || data.size || 1,
+                side: data.side === 'buy' ? 'buy' : 'sell' as "buy" | "sell"
+            };
+            setTrades(prev => [newTrade, ...prev].slice(0, 20));
+        };
+
+        if (socket) {
+            socket.on('trade_executed', handleTradeExecuted);
+            socket.on('sidex_agent_trade', handleTradeExecuted);
+        }
+
+        // Generate realistic trades based on price movement
+        const interval = setInterval(() => {
+            const isBuy = Math.random() > 0.48;
+            const tradeSize = 0.5 + Math.random() * 4.5;
+            const tradePrice = price * (1 + (isBuy ? 1 : -1) * tradeSize * 0.0001);
+
+            const newTrade = {
+                id: `t_${Date.now()}`,
+                time: new Date().toLocaleTimeString([], { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" }),
+                price: tradePrice,
+                size: tradeSize,
                 side: isBuy ? "buy" : "sell" as "buy" | "sell"
             };
             setTrades(prev => [newTrade, ...prev].slice(0, 20));
-            setPrice(p => p + (Math.random() - 0.5) * 0.05);
-        }, 400);
-        return () => clearInterval(interval);
+        }, 800);
+
+        return () => {
+            clearInterval(interval);
+            if (socket) {
+                socket.off('trade_executed', handleTradeExecuted);
+                socket.off('sidex_agent_trade', handleTradeExecuted);
+            }
+        };
     }, [price]);
 
     return (

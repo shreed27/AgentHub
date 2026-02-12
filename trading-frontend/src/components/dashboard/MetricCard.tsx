@@ -2,7 +2,6 @@
 
 import { motion } from "framer-motion";
 import { AreaChart, Area, ResponsiveContainer } from "recharts";
-import { ArrowUpRight, ArrowDownRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface MetricCardProps {
@@ -17,45 +16,38 @@ export function MetricCard({ title, value, change, data, accentColor }: MetricCa
     const isPositive = change >= 0;
 
     const accentMap = {
-        blue: { stroke: "#3b82f6", fill: "var(--primary)" },
-        green: { stroke: "#22c55e", fill: "var(--primary)" },
-        purple: { stroke: "#a855f7", fill: "var(--primary)" },
-        orange: { stroke: "#f97316", fill: "var(--primary)" },
+        blue: { stroke: "#3b82f6", fill: "rgba(59, 130, 246, 0.05)" },
+        green: { stroke: "#10b981", fill: "rgba(16, 185, 129, 0.05)" },
+        purple: { stroke: "#8b5cf6", fill: "rgba(139, 92, 246, 0.05)" },
+        orange: { stroke: "#f97316", fill: "rgba(249, 115, 22, 0.05)" },
     };
 
     const selectedColor = accentMap[accentColor];
 
     return (
-        <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="relative overflow-hidden rounded-2xl border border-border bg-card/50 backdrop-blur-xl p-6 hover:bg-card/80 transition-all duration-500 group shadow-sm hover:shadow-md"
-        >
-            {/* Subtle Gradient Background */}
-            <div className="absolute inset-0 bg-gradient-to-br from-transparent to-black/5 dark:to-white/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
-
-            <div className="flex justify-between items-start mb-6 relative z-10">
-                <div>
-                    <p className="text-[11px] font-semibold text-muted-foreground/80 uppercase tracking-widest leading-none mb-2">{title}</p>
-                    <h3 className="text-3xl font-bold text-foreground tracking-tighter tabular-nums">{value}</h3>
+        <div className="glass-card group p-8 flex flex-col justify-between min-h-[180px] shadow-none hover:shadow-[0_20px_50px_-12px_rgba(0,0,0,0.5)]">
+            <div className="relative z-10">
+                <div className="flex justify-between items-center mb-4">
+                    <span className="text-[11px] font-bold text-[#52525b] uppercase tracking-[0.2em]">{title}</span>
+                    <div className={cn(
+                        "text-[10px] font-bold px-2 py-0.5 rounded-md transition-all",
+                        isPositive
+                            ? "text-emerald-400 bg-emerald-500/10 border border-emerald-500/20"
+                            : "text-rose-400 bg-rose-500/10 border border-rose-500/20"
+                    )}>
+                        {isPositive ? "↑" : "↓"} {Math.abs(change)}%
+                    </div>
                 </div>
-                <div className={cn(
-                    "flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-full border shadow-sm transition-colors tabular-nums",
-                    isPositive
-                        ? "text-green-600 dark:text-green-400 border-green-200 dark:border-green-900/30 bg-green-50 dark:bg-green-900/10"
-                        : "text-red-600 dark:text-red-400 border-red-200 dark:border-red-900/30 bg-red-50 dark:bg-red-900/10"
-                )}>
-                    {isPositive ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
-                    {Math.abs(change)}%
-                </div>
+                <h3 className="text-3xl font-bold text-white tracking-[-0.04em]">{value}</h3>
             </div>
 
-            <div className="h-[80px] w-[120%] -ml-[10%] absolute bottom-[-5px] left-0 right-0 opacity-40 group-hover:opacity-60 transition-opacity duration-500 grayscale group-hover:grayscale-0">
+            {/* Chart Area */}
+            <div className="h-[60px] w-full mt-4 -mx-8 mb--8 overflow-hidden relative opacity-40 group-hover:opacity-100 transition-all duration-700">
                 <ResponsiveContainer width="100%" height="100%">
                     <AreaChart data={data}>
                         <defs>
                             <linearGradient id={`${accentColor}Gradient`} x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="5%" stopColor={selectedColor.stroke} stopOpacity={0.4} />
+                                <stop offset="5%" stopColor={selectedColor.stroke} stopOpacity={0.1} />
                                 <stop offset="95%" stopColor={selectedColor.stroke} stopOpacity={0} />
                             </linearGradient>
                         </defs>
@@ -63,13 +55,18 @@ export function MetricCard({ title, value, change, data, accentColor }: MetricCa
                             type="monotone"
                             dataKey="value"
                             stroke={selectedColor.stroke}
-                            strokeWidth={2}
+                            strokeWidth={1.5}
                             fill={`url(#${accentColor}Gradient)`}
+                            isAnimationActive={true}
                             animationDuration={2000}
+                            dot={false}
                         />
                     </AreaChart>
                 </ResponsiveContainer>
             </div>
-        </motion.div>
+
+            {/* Shimmer Effect on Hover */}
+            <div className="absolute inset-x-0 top-0 h-[1px] bg-gradient-to-r from-transparent via-white/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700 shimmer" />
+        </div>
     );
 }

@@ -50,8 +50,14 @@ export default function CopyTradingTab({ walletAddress }: CopyTradingTabProps) {
                 api.getCopyTradingConfigs(walletAddress),
                 api.getCopyTradingStats(walletAddress),
             ]);
-            if (configsRes.success) setConfigs((configsRes.data || []) as CopyConfig[]);
-            if (statsRes.success) setStats(statsRes.data as CopyStats);
+            if (configsRes.success && configsRes.data) {
+                const rawData = configsRes.data as { data?: CopyConfig[] } | CopyConfig[];
+                setConfigs(Array.isArray(rawData) ? rawData : (rawData.data || []));
+            }
+            if (statsRes.success && statsRes.data) {
+                const rawData = statsRes.data as { data?: CopyStats } | CopyStats;
+                setStats('data' in rawData && rawData.data ? rawData.data : rawData as CopyStats);
+            }
         } catch (error) {
             console.error('Failed to load copy trading data:', error);
         } finally {

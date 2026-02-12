@@ -3,129 +3,112 @@
 import { useAIReasoning } from '@/lib/useWebSocket';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Brain, Sparkles, TrendingUp, TrendingDown, Eye, AlertCircle } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 const recommendationConfig: Record<
   string,
-  { color: string; bg: string; icon: React.ReactNode }
+  { color: string; label: string; icon: React.ReactNode }
 > = {
   strong_buy: {
-    color: 'text-green-400',
-    bg: 'bg-green-500/20 border-green-500/30',
-    icon: <TrendingUp className="h-4 w-4 text-green-400" />,
+    color: 'text-[#2dce89]',
+    label: 'Strong Buy',
+    icon: <TrendingUp className="h-3.5 w-3.5" />,
   },
   buy: {
-    color: 'text-emerald-400',
-    bg: 'bg-emerald-500/20 border-emerald-500/30',
-    icon: <TrendingUp className="h-4 w-4 text-emerald-400" />,
+    color: 'text-[#2dce89]',
+    label: 'Buy',
+    icon: <TrendingUp className="h-3.5 w-3.5" />,
   },
   watch: {
-    color: 'text-yellow-400',
-    bg: 'bg-yellow-500/20 border-yellow-500/30',
-    icon: <Eye className="h-4 w-4 text-yellow-400" />,
+    color: 'text-[#ffb800]',
+    label: 'Watch',
+    icon: <Eye className="h-3.5 w-3.5" />,
   },
   avoid: {
-    color: 'text-orange-400',
-    bg: 'bg-orange-500/20 border-orange-500/30',
-    icon: <AlertCircle className="h-4 w-4 text-orange-400" />,
+    color: 'text-[#f53d2d]',
+    label: 'Avoid',
+    icon: <AlertCircle className="h-3.5 w-3.5" />,
   },
   sell: {
-    color: 'text-red-400',
-    bg: 'bg-red-500/20 border-red-500/30',
-    icon: <TrendingDown className="h-4 w-4 text-red-400" />,
+    color: 'text-[#f53d2d]',
+    label: 'Sell',
+    icon: <TrendingDown className="h-3.5 w-3.5" />,
   },
 };
-
-function formatTimeAgo(timestamp: number): string {
-  const seconds = Math.floor((Date.now() - timestamp) / 1000);
-  if (seconds < 60) return `${seconds}s ago`;
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  return `${hours}h ago`;
-}
 
 export function AIReasoning() {
   const { reasoning, isConnected } = useAIReasoning();
 
   return (
-    <div className="rounded-xl border border-white/10 bg-white/5 backdrop-blur-xl p-4">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-semibold text-white flex items-center gap-2">
-          <Brain className="h-5 w-5 text-purple-400" />
-          AI Reasoning
-          <Sparkles className="h-4 w-4 text-purple-400 animate-pulse" />
-        </h3>
-        <div className="flex items-center gap-2">
-          <span
-            className={`h-2 w-2 rounded-full ${
-              isConnected ? 'bg-green-400 animate-pulse' : 'bg-red-400'
-            }`}
-          />
-          <span className="text-xs text-zinc-400">
-            {isConnected ? 'Streaming' : 'Offline'}
-          </span>
+    <div className="glass-card flex flex-col h-full min-h-[400px]">
+      <div className="p-8 border-b border-white/[0.05] bg-white/[0.01]">
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2">
+            <div className="p-2 rounded-lg bg-purple-500/10 border border-purple-500/20">
+              <Brain className="h-4 w-4 text-purple-400" />
+            </div>
+            <h3 className="text-[13px] font-bold text-white uppercase tracking-widest">Neural Analysis</h3>
+          </div>
+          <div className="flex items-center gap-2 px-2 py-1 bg-white/[0.03] rounded-full">
+            <div className={cn("w-1 h-1 rounded-full", isConnected ? "bg-[#2dce89] animate-pulse" : "bg-[#f53d2d]")} />
+            <span className="text-[10px] font-medium text-[#86868b]">{isConnected ? 'Uplink' : 'Offline'}</span>
+          </div>
         </div>
+        <h2 className="text-2xl font-bold text-white tracking-tight">AI Reasoning</h2>
+        <p className="text-sm text-[#86868b] mt-1">Autonomous insight generation for current market conditions.</p>
       </div>
 
-      <div className="space-y-3 max-h-[350px] overflow-y-auto">
-        <AnimatePresence mode="popLayout">
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        <AnimatePresence mode="popLayout" initial={false}>
           {reasoning.length === 0 ? (
-            <div className="text-center py-8 text-zinc-500">
-              <Brain className="h-10 w-10 mx-auto mb-3 opacity-50" />
-              <p className="text-sm">AI is analyzing markets...</p>
-              <p className="text-xs mt-1 opacity-75">Insights will appear here</p>
-            </div>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="text-center py-20 flex flex-col items-center"
+            >
+              <Sparkles className="h-8 w-8 text-white/5 mb-4" />
+              <p className="text-[13px] font-medium text-[#86868b]">Collecting market intelligence...</p>
+            </motion.div>
           ) : (
             reasoning.map((item) => {
-              const config =
-                recommendationConfig[item.recommendation] || recommendationConfig.watch;
+              const config = recommendationConfig[item.recommendation] || recommendationConfig.watch;
 
               return (
                 <motion.div
                   key={item.id}
-                  initial={{ opacity: 0, y: -10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 10 }}
-                  className={`p-4 rounded-lg border ${config.bg}`}
+                  layout
+                  initial={{ opacity: 0, scale: 0.98, y: 10 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  className="p-5 rounded-2xl bg-white/[0.02] border border-white/[0.04] hover:border-white/[0.1] transition-all group"
                 >
-                  <div className="flex items-start justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      {config.icon}
-                      <span className="font-bold text-white">{item.token}</span>
-                      <span
-                        className={`text-xs font-semibold px-2 py-0.5 rounded uppercase ${config.color}`}
-                      >
-                        {item.recommendation.replace('_', ' ')}
-                      </span>
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                      <div className="flex flex-col">
+                        <span className="font-bold text-white text-[15px] tracking-tight">{item.token}</span>
+                        <div className={cn("flex items-center gap-1.5 mt-0.5", config.color)}>
+                          {config.icon}
+                          <span className="text-[12px] font-bold uppercase tracking-tight">{config.label}</span>
+                        </div>
+                      </div>
                     </div>
-                    <span className="text-xs text-zinc-500">
-                      {formatTimeAgo(item.timestamp)}
-                    </span>
+                    <div className="flex flex-col items-end">
+                      <span className="text-[15px] font-bold text-white">{item.confidence}%</span>
+                      <span className="text-[10px] font-medium text-[#86868b] uppercase tracking-tighter">Confidence</span>
+                    </div>
                   </div>
 
-                  <p className="text-sm text-zinc-300 leading-relaxed">{item.reasoning}</p>
+                  <p className="text-[14px] text-[#86868b] leading-relaxed font-medium group-hover:text-white transition-colors">
+                    {item.reasoning}
+                  </p>
 
-                  <div className="mt-3 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-zinc-500">Confidence:</span>
-                      <div className="h-1.5 w-20 bg-zinc-800 rounded-full overflow-hidden">
-                        <motion.div
-                          initial={{ width: 0 }}
-                          animate={{ width: `${item.confidence}%` }}
-                          transition={{ duration: 0.5 }}
-                          className={`h-full ${
-                            item.confidence >= 80
-                              ? 'bg-purple-500'
-                              : item.confidence >= 60
-                              ? 'bg-purple-400'
-                              : 'bg-purple-300'
-                          }`}
-                        />
-                      </div>
-                      <span className={`text-xs font-medium ${config.color}`}>
-                        {item.confidence}%
-                      </span>
-                    </div>
+                  <div className="mt-4 h-1 w-full bg-white/[0.03] rounded-full overflow-hidden">
+                    <motion.div
+                      initial={{ width: 0 }}
+                      animate={{ width: `${item.confidence}%` }}
+                      transition={{ duration: 1, ease: [0.16, 1, 0.3, 1] }}
+                      className="h-full bg-gradient-to-r from-purple-500/50 to-purple-400 rounded-full"
+                    />
                   </div>
                 </motion.div>
               );

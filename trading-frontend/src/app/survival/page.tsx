@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import api from "@/lib/api";
-import { useWallet } from "@solana/wallet-adapter-react";
+import { useWallet } from "@/hooks/useWalletCompat";
 import { useCustomWalletModal } from "@/components/providers/CustomWalletModalProvider";
 
 interface SurvivalConfig {
@@ -88,10 +88,12 @@ export default function SurvivalPage() {
 
         try {
             const dashboardRes = await api.getSurvivalDashboard(wallet);
-            if (dashboardRes.success) {
-                const data = dashboardRes.data;
-                setConfig(data.config);
-                setMetrics(data.metrics);
+            if (dashboardRes.success && dashboardRes.data) {
+                const rawData = dashboardRes.data as unknown;
+                const nested = rawData as { data?: { config: SurvivalConfig; metrics: SurvivalMetrics; history: StateHistory[] } };
+                const data = nested.data || rawData as { config: SurvivalConfig; metrics: SurvivalMetrics; history: StateHistory[] };
+                if (data.config) setConfig(data.config);
+                if (data.metrics) setMetrics(data.metrics);
                 setHistory(data.history || []);
             }
         } catch (error) {
@@ -234,7 +236,8 @@ export default function SurvivalPage() {
                                         )}
                                         style={{
                                             backgroundColor: `${state.color}20`,
-                                            ringColor: state.color
+                                            // @ts-expect-error ringColor is a custom CSS variable
+                                            '--tw-ring-color': state.color
                                         }}
                                     >
                                         <Icon className="w-5 h-5" style={{ color: state.color }} />

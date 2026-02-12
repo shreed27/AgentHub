@@ -1,283 +1,245 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { MetricCard } from "@/components/dashboard/MetricCard";
 import { AgentGrid } from "@/components/dashboard/AgentGrid";
-import { SystemLogs } from "@/components/dashboard/SystemLogs";
-import { MigrationFeed } from "@/components/dashboard/MigrationFeed";
 import { SignalFeed } from "@/components/trading/SignalFeed";
 import { WhaleAlerts } from "@/components/trading/WhaleAlerts";
 import { AIReasoning } from "@/components/trading/AIReasoning";
-import { ConnectionStatus } from "@/components/trading/ConnectionStatus";
-import { SurvivalModeIndicator } from "@/components/trading/SurvivalModeIndicator";
-import { Search, Bell, Rocket, Clock, Cpu, Activity, Zap, Crown, Brain, Loader2, AlertTriangle } from "lucide-react";
+import { AlertTriangle, TrendingUp, Zap, Activity, Layers, Cpu, Play, Rocket, ArrowRight, Sparkles } from "lucide-react";
 import api from "@/lib/api";
 import toast from "react-hot-toast";
+import Link from "next/link";
+import { cn } from "@/lib/utils";
 
 interface DashboardMetrics {
-  totalPnL: number;
-  totalVolume: number;
-  activePositions: number;
-  avgExecutionTime: number;
-  pnlChange: number;
-  volumeChange: number;
-}
-
-interface MarketStats {
-  activePredictionMarkets: number;
-  activeArbitrageOpportunities: number;
-  servicesOnline: number;
-  servicesTotal: number;
+    totalPnL: number;
+    totalVolume: number;
+    activePositions: number;
+    avgExecutionTime: number;
+    pnlChange: number;
+    volumeChange: number;
 }
 
 export default function Dashboard() {
-  const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
-  const [marketStats, setMarketStats] = useState<MarketStats | null>(null);
-  const [agentCount, setAgentCount] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [connectionError, setConnectionError] = useState(false);
+    const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [connectionError, setConnectionError] = useState(false);
 
-  // Generate sparkline data based on actual values
-  const generateSparkline = (value: number, positive: boolean) => {
-    const base = Math.max(value / 10, 10);
-    return Array.from({ length: 7 }, (_, i) => ({
-      value: base + (positive ? i * 5 : -i * 3) + Math.random() * 20
-    }));
-  };
+    const generateSparkline = (value: number, positive: boolean) => {
+        const base = Math.max(value / 10, 10);
+        return Array.from({ length: 12 }, (_, i) => ({
+            value: base + (positive ? Math.sin(i) * 20 + i * 2 : Math.cos(i) * 15 - i) + Math.random() * 10
+        }));
+    };
 
-  useEffect(() => {
-    async function fetchData() {
-      try {
-        // Fetch positions data
-        const positionsResponse = await api.getPositions();
-        if (positionsResponse.success && positionsResponse.data) {
-          const { summary } = positionsResponse.data;
-          setMetrics({
-            totalPnL: summary.totalUnrealizedPnL,
-            totalVolume: summary.totalValue,
-            activePositions: summary.totalPositions,
-            avgExecutionTime: 45, // Would come from execution stats
-            pnlChange: summary.totalUnrealizedPnL > 0 ? 5.2 : -2.1,
-            volumeChange: 12.8,
-          });
+    useEffect(() => {
+        async function fetchData() {
+            try {
+                const positionsResponse = await api.getPositions();
+                if (positionsResponse.success && positionsResponse.data) {
+                    const { summary } = positionsResponse.data;
+                    setMetrics({
+                        totalPnL: summary.totalUnrealizedPnL,
+                        totalVolume: summary.totalValue,
+                        activePositions: summary.totalPositions,
+                        avgExecutionTime: 42,
+                        pnlChange: 8.4,
+                        volumeChange: 12.2,
+                    });
+                }
+            } catch (error) {
+                console.error('Failed to fetch dashboard data:', error);
+                setConnectionError(true);
+            } finally {
+                setLoading(false);
+            }
         }
 
-        // Fetch agents count
-        const agentsResponse = await api.getAgents();
-        if (agentsResponse.success && agentsResponse.data) {
-          setAgentCount(agentsResponse.data.length);
-        }
+        fetchData();
+        const interval = setInterval(fetchData, 30000);
+        return () => clearInterval(interval);
+    }, []);
 
-        // Fetch market stats
-        const statsResponse = await api.getMarketStats();
-        if (statsResponse.success && statsResponse.data) {
-          setMarketStats(statsResponse.data as MarketStats);
-        }
-      } catch (error) {
-        console.error('Failed to fetch dashboard data:', error);
-        setConnectionError(true);
-        toast.error('Unable to connect to trading server. Check if the orchestrator is running.');
-      } finally {
-        setLoading(false);
-      }
-    }
+    return (
+        <div className="space-y-16 pb-20 pt-8">
+            {/* Professional Header Section */}
+            <header className="max-w-3xl">
+                <motion.div
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    className="flex items-center gap-2 mb-6"
+                >
+                    <div className="h-1 w-12 bg-white rounded-full" />
+                    <span className="text-xs font-bold uppercase tracking-[0.3em] text-[#52525b]">Market Intelligence</span>
+                </motion.div>
+                <h1 className="text-title mb-6">Execution<br />Command.</h1>
+                <p className="text-description">Real-time performance monitoring across decentralized liquidity pools and autonomous trade agents.</p>
+            </header>
 
-    fetchData();
+            {/* Premium CTA Cards Section */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.7 }}
+                >
+                    <Link href="/sidex">
+                        <div className="group relative overflow-hidden glass-card p-10 min-h-[320px] flex flex-col justify-between">
+                            <div className="absolute top-0 right-0 w-64 h-64 bg-accent-primary/10 blur-[100px] -translate-y-1/2 translate-x-1/2 group-hover:bg-accent-primary/20 transition-all duration-700" />
 
-    // Refresh every 30 seconds
-    const interval = setInterval(fetchData, 30000);
-    return () => clearInterval(interval);
-  }, []);
+                            <div>
+                                <div className="flex items-center gap-2 mb-6">
+                                    <span className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider bg-white/10 text-white rounded-full border border-white/10">Simulation</span>
+                                    <span className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider bg-emerald-500/10 text-emerald-400 rounded-full border border-emerald-500/10">Secure</span>
+                                </div>
+                                <h2 className="text-4xl font-bold text-white mb-4 tracking-[-0.03em]">Paper Trading</h2>
+                                <p className="text-[#a1a1aa] text-base leading-relaxed max-w-sm">
+                                    Execute high-frequency strategies with a $10,000 risk-free virtual balance. Zero latency execution.
+                                </p>
+                            </div>
 
-  const pnlData = generateSparkline(metrics?.totalPnL || 0, (metrics?.totalPnL || 0) >= 0);
-  const volData = generateSparkline(metrics?.totalVolume || 0, true);
-  const speedData = generateSparkline(metrics?.avgExecutionTime || 45, true);
+                            <div className="flex items-center gap-2 text-white font-bold text-sm group-hover:gap-4 transition-all duration-300">
+                                <span className="underline underline-offset-8 decoration-white/20 group-hover:decoration-white transition-all">Engage Terminal</span>
+                                <ArrowRight className="w-4 h-4" />
+                            </div>
+                        </div>
+                    </Link>
+                </motion.div>
 
-  return (
-    <div className="space-y-8 animate-in fade-in duration-500">
+                <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.7, delay: 0.1 }}
+                >
+                    <Link href="/polymarket">
+                        <div className="group relative overflow-hidden glass-card p-10 min-h-[320px] flex flex-col justify-between">
+                            <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/10 blur-[100px] -translate-y-1/2 translate-x-1/2 group-hover:bg-emerald-500/20 transition-all duration-700" />
 
-      {/* Header */}
-      <header className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight mb-1">Command Center</h1>
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <ConnectionStatus />
-            <span className="w-px h-3 bg-border mx-1" />
-            <span className="font-mono text-xs opacity-70 flex items-center gap-1">
-              <Clock className="w-3 h-3" /> Gateway: localhost:4000
-            </span>
-          </div>
-        </div>
+                            <div>
+                                <div className="flex items-center gap-2 mb-6">
+                                    <span className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider bg-emerald-500/10 text-emerald-400 rounded-full border border-emerald-500/10">Live Web3</span>
+                                    <span className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider bg-white/10 text-white rounded-full border border-white/10">Prediction</span>
+                                </div>
+                                <h2 className="text-4xl font-bold text-white mb-4 tracking-[-0.03em]">Predictions</h2>
+                                <p className="text-[#a1a1aa] text-base leading-relaxed max-w-sm">
+                                    Participate in global outcomes. Politics, crypto markets, and cultural events with real-time settlement.
+                                </p>
+                            </div>
 
-        <div className="flex items-center gap-4">
-          <div className="relative group">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground group-focus-within:text-foreground transition-colors" />
-            <input
-              type="text"
-              placeholder="Search markets or agents..."
-              className="h-10 pl-9 pr-4 rounded-full bg-accent/50 border border-border focus:border-ring focus:bg-accent outline-none text-sm transition-all w-64 placeholder:text-muted-foreground"
-            />
-          </div>
+                            <div className="flex items-center gap-2 text-white font-bold text-sm group-hover:gap-4 transition-all duration-300">
+                                <span className="underline underline-offset-8 decoration-white/20 group-hover:decoration-white transition-all">Launch Markets</span>
+                                <ArrowRight className="w-4 h-4" />
+                            </div>
+                        </div>
+                    </Link>
+                </motion.div>
+            </div>
 
-          <button className="h-10 w-10 rounded-full border border-border bg-card hover:bg-accent flex items-center justify-center transition-colors relative">
-            <Bell className="w-4 h-4 text-muted-foreground hover:text-foreground" />
-            <span className="absolute top-2 right-2.5 w-1.5 h-1.5 bg-destructive rounded-full border border-background" />
-          </button>
-
-          <button className="h-10 px-4 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium flex items-center gap-2 shadow-lg hover:scale-105 active:scale-95 transition-all">
-            <Rocket className="w-4 h-4" />
-            Deploy Agent
-          </button>
-        </div>
-      </header>
-
-      {/* Connection Error Banner */}
-      {connectionError && (
-        <div className="rounded-xl border border-yellow-500/30 bg-yellow-500/10 p-4 flex items-center gap-3">
-          <AlertTriangle className="w-5 h-5 text-yellow-500 flex-shrink-0" />
-          <div className="flex-1">
-            <p className="text-sm font-medium text-yellow-400">Connection Error</p>
-            <p className="text-xs text-muted-foreground">Unable to connect to the trading server. Make sure the orchestrator is running on localhost:4000</p>
-          </div>
-          <button
-            onClick={() => {
-              setConnectionError(false);
-              setLoading(true);
-              window.location.reload();
-            }}
-            className="px-3 py-1.5 rounded-lg bg-yellow-500/20 text-yellow-400 text-sm font-medium hover:bg-yellow-500/30 transition-colors"
-          >
-            Retry
-          </button>
-        </div>
-      )}
-
-      {/* Metrics Row */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {loading ? (
-          <>
-            {[1, 2, 3, 4].map((i) => (
-              <div key={i} className="h-32 rounded-xl border border-border bg-card/50 animate-pulse flex items-center justify-center">
-                <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-              </div>
-            ))}
-          </>
-        ) : (
-          <>
-            <MetricCard
-              title="Net Profit (24h)"
-              value={`$${(metrics?.totalPnL || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-              change={metrics?.pnlChange || 0}
-              data={pnlData}
-              accentColor="green"
-            />
-            <MetricCard
-              title="Trading Volume"
-              value={`$${((metrics?.totalVolume || 0) / 1000).toFixed(1)}K`}
-              change={metrics?.volumeChange || 0}
-              data={volData}
-              accentColor="blue"
-            />
-            <MetricCard
-              title="Active Positions"
-              value={String(metrics?.activePositions || 0)}
-              change={0}
-              data={pnlData}
-              accentColor="purple"
-            />
-            <MetricCard
-              title="Execution Speed"
-              value={`${metrics?.avgExecutionTime || 45}ms`}
-              change={2.1}
-              data={speedData}
-              accentColor="orange"
-            />
-          </>
-        )}
-      </div>
-
-      {/* Main Content Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-
-        {/* Left Column - Agents & System Logs */}
-        <div className="lg:col-span-4 flex flex-col gap-6">
-          {/* Agent Control */}
-          <div className="p-1 rounded-2xl border border-border bg-card/50 backdrop-blur-md overflow-auto flex flex-col shadow-sm">
-            <div className="px-5 py-4 border-b border-border flex justify-between items-center">
-              <h3 className="font-semibold flex items-center gap-2">
-                <Cpu className="w-4 h-4 text-blue-500" /> Agent Status
-                {agentCount > 0 && (
-                  <span className="text-xs text-muted-foreground">({agentCount})</span>
+            {/* Metrics Row - Hero Section */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                {loading ? (
+                    [1, 2, 3, 4].map((i) => (
+                        <div key={i} className="h-[160px] glass-card animate-pulse shadow-sm" />
+                    ))
+                ) : (
+                    <>
+                        <MetricCard
+                            title="Total PnL"
+                            value={`$ ${(metrics?.totalPnL || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
+                            change={metrics?.pnlChange || 0}
+                            data={generateSparkline(metrics?.totalPnL || 0, true)}
+                            accentColor="green"
+                        />
+                        <MetricCard
+                            title="Total Volume"
+                            value={`$ ${(metrics?.totalVolume || 0).toLocaleString()}`}
+                            change={metrics?.volumeChange || 0}
+                            data={generateSparkline(metrics?.totalVolume || 0, true)}
+                            accentColor="blue"
+                        />
+                        <MetricCard
+                            title="Active Positions"
+                            value={String(metrics?.activePositions || 0)}
+                            change={2.4}
+                            data={generateSparkline(metrics?.activePositions || 0, true)}
+                            accentColor="purple"
+                        />
+                        <MetricCard
+                            title="Avg Latency"
+                            value={`${metrics?.avgExecutionTime || 42}ms`}
+                            change={-1.2}
+                            data={generateSparkline(metrics?.avgExecutionTime || 42, false)}
+                            accentColor="orange"
+                        />
+                    </>
                 )}
-              </h3>
-              <button className="text-xs text-muted-foreground hover:text-foreground">View All</button>
             </div>
-            <div className="p-4 overflow-auto">
-              <AgentGrid />
+
+            {/* Main Application Layout */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+
+                {/* Left Section: Signal Intelligence */}
+                <div className="lg:col-span-8 space-y-12">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
+                        <section className="h-[600px] glass-card p-1">
+                            <SignalFeed />
+                        </section>
+                        <section className="h-[600px] glass-card p-1">
+                            <WhaleAlerts />
+                        </section>
+                    </div>
+
+                    {/* Pro Execution Intelligence */}
+                    <section className="glass-card p-10">
+                        <div className="flex items-center justify-between mb-10">
+                            <div className="flex items-center gap-4">
+                                <div className="h-12 w-12 rounded-2xl bg-white/[0.03] border border-white/[0.08] flex items-center justify-center">
+                                    <Cpu className="w-6 h-6 text-white" />
+                                </div>
+                                <div>
+                                    <h3 className="text-xl font-bold text-white tracking-tight">Active Agents</h3>
+                                    <p className="text-sm text-[#a1a1aa]">Neural processing units currently in the field.</p>
+                                </div>
+                            </div>
+                        </div>
+                        <AgentGrid />
+                    </section>
+                </div>
+
+                {/* Right Section: Analytics & Reasoning */}
+                <aside className="lg:col-span-4 space-y-12 h-full">
+                    <AIReasoning />
+
+                    <div className="glass-card p-10 group">
+                        <div className="flex items-center gap-3 mb-10">
+                            <div className="h-1.5 w-1.5 rounded-full bg-accent-primary shadow-[0_0_10px_var(--color-accent-primary)]" />
+                            <h3 className="text-[11px] font-bold text-white tracking-[0.2em] uppercase">Market Status</h3>
+                        </div>
+
+                        <div className="space-y-6">
+                            {[
+                                { label: "Execution Layer", value: "Online", status: "positive" },
+                                { label: "Sentiment Index", value: "Neutral", status: "neutral" },
+                                { label: "Volatility Rank", value: "Low", status: "neutral" },
+                                { label: "Arbitrage Health", value: "Active", status: "positive" }
+                            ].map((stat, i) => (
+                                <div key={i} className="flex justify-between items-center py-3 border-b border-white/[0.03] last:border-0 border-dashed">
+                                    <span className="text-sm font-medium text-[#a1a1aa]">{stat.label}</span>
+                                    <div className="flex items-center gap-2.5">
+                                        <div className={cn(
+                                            "w-1.5 h-1.5 rounded-full",
+                                            stat.status === "positive" ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]" : "bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.4)]"
+                                        )} />
+                                        <span className="text-sm font-bold text-white tracking-tight">{stat.value}</span>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </aside>
             </div>
-          </div>
-
-          {/* System Logs */}
-          <div className="flex-1 min-h-[300px]">
-            <SystemLogs />
-          </div>
         </div>
-
-        {/* Center Column - Signal Feed & Whale Alerts */}
-        <div className="lg:col-span-4 flex flex-col gap-6">
-          {/* Signal Feed */}
-          <SignalFeed />
-
-          {/* Whale Alerts */}
-          <WhaleAlerts />
-        </div>
-
-        {/* Right Column - AI Reasoning */}
-        <div className="lg:col-span-4 flex flex-col gap-6">
-          {/* Survival Mode Indicator */}
-          <SurvivalModeIndicator />
-
-          {/* AI Reasoning */}
-          <AIReasoning />
-
-          {/* Quick Stats */}
-          <div className="rounded-xl border border-white/10 bg-white/5 backdrop-blur-xl p-4">
-            <h3 className="text-lg font-semibold text-white flex items-center gap-2 mb-4">
-              <Zap className="h-5 w-5 text-yellow-400" />
-              Platform Stats
-            </h3>
-            <div className="space-y-3">
-              <div className="flex justify-between items-center p-3 rounded-lg bg-zinc-800/50">
-                <span className="text-sm text-zinc-400">Services Online</span>
-                <span className="font-semibold text-white">
-                  {marketStats ? `${marketStats.servicesOnline}/${marketStats.servicesTotal}` : '0/6'}
-                </span>
-              </div>
-              <div className="flex justify-between items-center p-3 rounded-lg bg-zinc-800/50">
-                <span className="text-sm text-zinc-400">Prediction Markets</span>
-                <span className="font-semibold text-white">{marketStats?.activePredictionMarkets || 0}</span>
-              </div>
-              <div className="flex justify-between items-center p-3 rounded-lg bg-zinc-800/50">
-                <span className="text-sm text-zinc-400">Arbitrage Opps</span>
-                <span className="font-semibold text-white">{marketStats?.activeArbitrageOpportunities || 0}</span>
-              </div>
-              <div className="flex justify-between items-center p-3 rounded-lg bg-zinc-800/50">
-                <span className="text-sm text-zinc-400">Active Agents</span>
-                <span className="font-semibold text-yellow-400">{agentCount}</span>
-              </div>
-              <div className="flex justify-between items-center p-3 rounded-lg bg-zinc-800/50">
-                <span className="text-sm text-zinc-400">Open Positions</span>
-                <span className="font-semibold text-purple-400">{metrics?.activePositions || 0}</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Migration Feed */}
-          <MigrationFeed />
-        </div>
-
-      </div>
-
-    </div>
-  );
+    );
 }

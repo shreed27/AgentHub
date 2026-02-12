@@ -10,7 +10,7 @@ interface PredictionCardProps {
     volume: string;
     chance: number;
     chartData: { time: string; value: number }[];
-    category: "Crypto" | "Macro" | "Tech";
+    category: "Crypto" | "Macro" | "Tech" | "Sports" | "Politics" | "Science" | "Entertainment" | "Other";
     timeLeft: string;
 }
 

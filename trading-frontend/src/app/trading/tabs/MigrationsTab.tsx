@@ -45,10 +45,17 @@ export default function MigrationsTab() {
                 api.getMigrationStats(),
             ]);
             if (migrationsRes.success && migrationsRes.data) {
-                setMigrations(migrationsRes.data.migrations);
+                const rawData = migrationsRes.data as { data?: { migrations: Migration[] }; migrations?: Migration[] } | { migrations: Migration[] };
+                const migrations = 'data' in rawData && rawData.data?.migrations
+                    ? rawData.data.migrations
+                    : 'migrations' in rawData && rawData.migrations
+                        ? rawData.migrations
+                        : [];
+                setMigrations(migrations);
             }
-            if (statsRes.success) {
-                setStats(statsRes.data as MigrationStats);
+            if (statsRes.success && statsRes.data) {
+                const rawData = statsRes.data as { data?: MigrationStats } | MigrationStats;
+                setStats('data' in rawData && rawData.data ? rawData.data : rawData as MigrationStats);
             }
         } catch (error) {
             console.error('Failed to load migrations:', error);

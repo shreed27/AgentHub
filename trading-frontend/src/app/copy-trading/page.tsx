@@ -22,9 +22,11 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import api from "@/lib/api";
-import { useWallet } from "@solana/wallet-adapter-react";
+import { useWallet } from "@/hooks/useWalletCompat";
 import { useCustomWalletModal } from "@/components/providers/CustomWalletModalProvider";
 import Link from "next/link";
+import { DEMO_MODE, DEMO_COPY_TRADING } from "@/lib/demoData";
+import { DataSourceIndicator } from "@/components/DemoBanner";
 
 interface CopyConfig {
   id: string;
@@ -84,7 +86,7 @@ function ConnectPolymarketModal({ onClose }: { onClose: () => void }) {
         initial={{ scale: 0.95, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.95, opacity: 0 }}
-        onClick={(e) => e.stopPropagation()}
+        onClick={(e: React.MouseEvent) => e.stopPropagation()}
         className="bg-zinc-900 border border-white/10 rounded-2xl max-w-md w-full"
       >
         <div className="p-6 border-b border-white/10 flex items-center justify-between">
@@ -182,7 +184,9 @@ function CreateConfigModal({
         takeProfitPercent: takeProfitPercent ? parseFloat(takeProfitPercent) : undefined,
       });
 
-      if (!result.success && (result as any).code === "CREDENTIALS_REQUIRED") {
+      // Type-safe check for credentials required error
+      const resultWithCode = result as { success: boolean; code?: string; data?: unknown; error?: string };
+      if (!resultWithCode.success && resultWithCode.code === "CREDENTIALS_REQUIRED") {
         onClose();
         onCredentialsRequired();
         return;
@@ -215,7 +219,7 @@ function CreateConfigModal({
         initial={{ scale: 0.95, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.95, opacity: 0 }}
-        onClick={(e) => e.stopPropagation()}
+        onClick={(e: React.MouseEvent) => e.stopPropagation()}
         className="bg-zinc-900 border border-white/10 rounded-2xl max-w-lg w-full"
       >
         <div className="p-6 border-b border-white/10 flex items-center justify-between">
@@ -428,6 +432,7 @@ export default function CopyTradingPage() {
   const [showConnectPolymarketModal, setShowConnectPolymarketModal] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isPolymarketConnected, setIsPolymarketConnected] = useState<boolean | null>(null);
+  const [dataSource, setDataSource] = useState<'live' | 'demo' | null>(null);
 
   // Get wallet address from connected wallet
   const userWallet = connected && publicKey ? publicKey.toBase58() : null;
@@ -457,32 +462,65 @@ export default function CopyTradingPage() {
   };
 
   const fetchData = async () => {
-    if (!userWallet) {
+    if (!userWallet && !DEMO_MODE) {
       setIsLoading(false);
       return;
     }
 
     setIsLoading(true);
+
+    // Use demo data if in demo mode
+    if (DEMO_MODE) {
+      setConfigs(DEMO_COPY_TRADING.configs as unknown as CopyConfig[]);
+      setStats(DEMO_COPY_TRADING.stats as CopyStats);
+      setHistory(DEMO_COPY_TRADING.history as unknown as CopyHistory[]);
+      setDataSource('demo');
+      setIsLoading(false);
+      return;
+    }
+
     try {
       const [configsRes, statsRes, historyRes] = await Promise.all([
-        api.getCopyTradingConfigs(userWallet),
-        api.getCopyTradingStats(userWallet),
-        api.getCopyTradingHistory({ userWallet, limit: 20 }),
+        api.getCopyTradingConfigs(userWallet || ''),
+        api.getCopyTradingStats(userWallet || ''),
+        api.getCopyTradingHistory({ userWallet: userWallet || '', limit: 20 }),
       ]);
 
+      let hasData = false;
+
       if (configsRes.success && configsRes.data) {
-        setConfigs(configsRes.data as CopyConfig[]);
+        const configsData = (configsRes.data as { data?: CopyConfig[] })?.data || configsRes.data;
+        setConfigs(Array.isArray(configsData) ? configsData as CopyConfig[] : []);
+        hasData = true;
       }
 
       if (statsRes.success && statsRes.data) {
-        setStats(statsRes.data as CopyStats);
+        const statsData = (statsRes.data as { data?: CopyStats })?.data || statsRes.data;
+        setStats(statsData as CopyStats);
+        hasData = true;
       }
 
       if (historyRes.success && historyRes.data) {
-        setHistory(historyRes.data as CopyHistory[]);
+        const historyData = ((historyRes.data as unknown) as { data?: CopyHistory[] })?.data || historyRes.data;
+        setHistory(Array.isArray(historyData) ? historyData as CopyHistory[] : []);
+        hasData = true;
+      }
+
+      setDataSource(hasData ? 'live' : 'demo');
+
+      // Fallback to demo data if API returned empty
+      if (!hasData) {
+        setConfigs(DEMO_COPY_TRADING.configs as unknown as CopyConfig[]);
+        setStats(DEMO_COPY_TRADING.stats as CopyStats);
+        setHistory(DEMO_COPY_TRADING.history as unknown as CopyHistory[]);
       }
     } catch (error) {
-      console.error("Failed to fetch copy trading data:", error);
+      console.error("Failed to fetch copy trading data, using demo data:", error);
+      // Fallback to demo data on error
+      setConfigs(DEMO_COPY_TRADING.configs as unknown as CopyConfig[]);
+      setStats(DEMO_COPY_TRADING.stats as CopyStats);
+      setHistory(DEMO_COPY_TRADING.history as unknown as CopyHistory[]);
+      setDataSource('demo');
     } finally {
       setIsLoading(false);
     }
@@ -511,6 +549,7 @@ export default function CopyTradingPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight mb-2 flex items-center gap-3">
             <Users className="w-8 h-8 text-purple-400" /> Copy Trading
+            {dataSource && <DataSourceIndicator source={dataSource} />}
           </h1>
           <p className="text-muted-foreground">
             Automatically mirror trades from successful wallets.

@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import api from "@/lib/api";
-import { useWallet } from "@solana/wallet-adapter-react";
+import { useWallet } from "@/hooks/useWalletCompat";
 import { useCustomWalletModal } from "@/components/providers/CustomWalletModalProvider";
 
 interface ArbitrageOpportunity {
@@ -78,13 +78,14 @@ export default function ArbitragePage() {
                 wallet ? api.get('/arbitrage/stats', { wallet }) : Promise.resolve({ success: true, data: null }),
             ]);
 
-            if (oppsRes.success) setOpportunities(oppsRes.data || []);
-            if (execsRes.success) setExecutions(execsRes.data || []);
-            if (configRes.success) {
-                setConfig(configRes.data);
-                setAutoExecute(configRes.data?.autoExecute || false);
+            if (oppsRes.success) setOpportunities((oppsRes.data as ArbitrageOpportunity[]) || []);
+            if (execsRes.success) setExecutions((execsRes.data as ArbitrageExecution[]) || []);
+            if (configRes.success && configRes.data) {
+                const configData = configRes.data as ArbitrageConfig;
+                setConfig(configData);
+                setAutoExecute(configData.autoExecute || false);
             }
-            if (statsRes.success) setStats(statsRes.data);
+            if (statsRes.success && statsRes.data) setStats(statsRes.data as { totalExecutions: number; totalProfit: number; successRate: number });
         } catch (error) {
             console.error('Error loading arbitrage data:', error);
         } finally {

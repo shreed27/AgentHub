@@ -779,9 +779,9 @@ class ApiClient {
     return this.request<{
       data: {
         hunters: Array<{
-          rank: number;
+          position: number;
           walletAddress: string;
-          rank: string;
+          rankTitle: string;
           totalEarnings: number;
           bountiesCompleted: number;
           successRate: number;
@@ -1736,6 +1736,707 @@ class ApiClient {
 
   async getEVMStats(wallet: string) {
     return this.request<unknown>('GET', `/api/v1/evm/stats/${wallet}`);
+  }
+
+  // ==================== Sidex Trading ====================
+
+  async sidexTrade(params: {
+    symbol: string;
+    side: 'buy' | 'sell';
+    amount: number;
+    leverage: number;
+  }) {
+    return this.request<{
+      success: boolean;
+      orderId?: string;
+      symbol?: string;
+      side?: string;
+      amount?: number;
+      price?: number;
+      timestamp?: string;
+      error?: string;
+    }>('POST', '/api/v1/sidex/trade', params);
+  }
+
+  async sidexClose(params: { symbol: string; direction: 'long' | 'short' }) {
+    return this.request<{
+      success: boolean;
+      symbol?: string;
+      side?: string;
+      amount?: number;
+      price?: number;
+      timestamp?: string;
+      error?: string;
+    }>('POST', '/api/v1/sidex/close', params);
+  }
+
+  async getSidexPositions() {
+    return this.request<Array<{
+      id: string;
+      symbol: string;
+      side: 'long' | 'short';
+      size: number;
+      entryPrice: number;
+      currentPrice: number;
+      pnl: number;
+      pnlPercent: number;
+      leverage: number;
+      openedAt: string;
+    }>>('GET', '/api/v1/sidex/positions');
+  }
+
+  async getSidexBalance() {
+    return this.request<{
+      total: number;
+      available: number;
+      inPositions: number;
+      pnl: number;
+      pnlPercent: number;
+    }>('GET', '/api/v1/sidex/balance');
+  }
+
+  async toggleSidexSimulation(enabled: boolean) {
+    return this.request<{ enabled: boolean }>('POST', '/api/v1/sidex/simulation', { enabled });
+  }
+
+  async getSidexSimulationStatus() {
+    return this.request<{ enabled: boolean }>('GET', '/api/v1/sidex/simulation');
+  }
+
+  async resetSidexAccount() {
+    return this.request<{
+      success: boolean;
+      balance: {
+        total: number;
+        available: number;
+        inPositions: number;
+        pnl: number;
+        pnlPercent: number;
+      };
+    }>('POST', '/api/v1/sidex/reset');
+  }
+
+  async getSidexHealth() {
+    return this.request<{
+      healthy: boolean;
+      latencyMs?: number;
+      lastChecked: number;
+      error?: string;
+    }>('GET', '/api/v1/sidex/health');
+  }
+
+  // ==================== Sidex Real-Time Prices ====================
+
+  async getSidexPrices() {
+    return this.request<{
+      prices: Record<string, {
+        symbol: string;
+        price: number;
+        change24h: number;
+        changePercent24h: number;
+        high24h: number;
+        low24h: number;
+        volume24h: number;
+        timestamp: number;
+      }>;
+      connected: boolean;
+      priceCount: number;
+    }>('GET', '/api/v1/sidex/prices');
+  }
+
+  async getSidexPrice(symbol: string) {
+    return this.request<{
+      symbol: string;
+      price: number;
+      change24h: number;
+      changePercent24h: number;
+      high24h: number;
+      low24h: number;
+      volume24h: number;
+      timestamp: number;
+    }>('GET', `/api/v1/sidex/prices/${symbol.replace('/', '-')}`);
+  }
+
+  async connectSidexPrices() {
+    return this.request<{ message: string }>('POST', '/api/v1/sidex/prices/connect');
+  }
+
+  async disconnectSidexPrices() {
+    return this.request<{ message: string }>('POST', '/api/v1/sidex/prices/disconnect');
+  }
+
+  // ==================== Sidex AI Agent Sandbox ====================
+
+  async getSidexAgents() {
+    return this.request<Array<{
+      id: string;
+      name: string;
+      strategy: string;
+      status: 'running' | 'paused' | 'stopped';
+      capital: number;
+      currentCapital: number;
+      riskLevel: 'conservative' | 'moderate' | 'aggressive';
+      createdAt: string;
+      lastTradeAt?: string;
+      stats: {
+        totalTrades: number;
+        winningTrades: number;
+        losingTrades: number;
+        totalPnl: number;
+        winRate: number;
+        avgWin: number;
+        avgLoss: number;
+        largestWin: number;
+        largestLoss: number;
+        currentDrawdown: number;
+        maxDrawdown: number;
+      };
+    }>>('GET', '/api/v1/sidex/agents');
+  }
+
+  async createSidexAgent(params: {
+    name: string;
+    strategy: 'dca' | 'momentum' | 'mean_reversion' | 'whale_follow' | 'arbitrage' | 'custom';
+    capital: number;
+    riskLevel: 'conservative' | 'moderate' | 'aggressive';
+    maxPositionSize?: number;
+    stopLossPercent?: number;
+    takeProfitPercent?: number;
+    symbols?: string[];
+    customPrompt?: string;
+  }) {
+    return this.request<{
+      id: string;
+      name: string;
+      strategy: string;
+      status: string;
+      capital: number;
+      currentCapital: number;
+      riskLevel: string;
+      createdAt: string;
+      stats: Record<string, unknown>;
+    }>('POST', '/api/v1/sidex/agents', params);
+  }
+
+  async getSidexAgent(agentId: string) {
+    return this.request<{
+      id: string;
+      name: string;
+      strategy: string;
+      status: 'running' | 'paused' | 'stopped';
+      capital: number;
+      currentCapital: number;
+      riskLevel: string;
+      config: Record<string, unknown>;
+      createdAt: string;
+      lastTradeAt?: string;
+      stats: Record<string, unknown>;
+    }>('GET', `/api/v1/sidex/agents/${agentId}`);
+  }
+
+  async startSidexAgent(agentId: string) {
+    return this.request<{ success: boolean; error?: string }>('POST', `/api/v1/sidex/agents/${agentId}/start`);
+  }
+
+  async stopSidexAgent(agentId: string) {
+    return this.request<{ success: boolean; error?: string }>('POST', `/api/v1/sidex/agents/${agentId}/stop`);
+  }
+
+  async pauseSidexAgent(agentId: string) {
+    return this.request<{ success: boolean; error?: string }>('POST', `/api/v1/sidex/agents/${agentId}/pause`);
+  }
+
+  async deleteSidexAgent(agentId: string) {
+    return this.request<{ success: boolean; error?: string }>('DELETE', `/api/v1/sidex/agents/${agentId}`);
+  }
+
+  async getSidexAgentStats(agentId: string) {
+    return this.request<{
+      totalTrades: number;
+      winningTrades: number;
+      losingTrades: number;
+      totalPnl: number;
+      winRate: number;
+      avgWin: number;
+      avgLoss: number;
+      largestWin: number;
+      largestLoss: number;
+      currentDrawdown: number;
+      maxDrawdown: number;
+    }>('GET', `/api/v1/sidex/agents/${agentId}/stats`);
+  }
+
+  async getSidexAgentTrades(agentId?: string) {
+    const params = agentId ? `?agentId=${agentId}` : '';
+    return this.request<Array<{
+      id: string;
+      agentId: string;
+      symbol: string;
+      side: 'buy' | 'sell';
+      amount: number;
+      price: number;
+      pnl?: number;
+      timestamp: string;
+      reason?: string;
+    }>>('GET', `/api/v1/sidex/agent-trades${params}`);
+  }
+
+  // ==================== Sidex Copy Trading Sandbox ====================
+
+  async getSidexCopyConfigs() {
+    return this.request<Array<{
+      id: string;
+      targetWallet: string;
+      targetLabel?: string;
+      enabled: boolean;
+      sizingMode: 'fixed' | 'proportional' | 'percentage';
+      fixedSize: number;
+      proportionMultiplier: number;
+      portfolioPercentage: number;
+      maxPositionSize?: number;
+      minTradeSize: number;
+      stopLossPercent?: number;
+      takeProfitPercent?: number;
+      createdAt: string;
+      stats: {
+        totalCopied: number;
+        totalSkipped: number;
+        totalPnl: number;
+        winRate: number;
+      };
+    }>>('GET', '/api/v1/sidex/copy-configs');
+  }
+
+  async createSidexCopyConfig(params: {
+    targetWallet: string;
+    targetLabel?: string;
+    sizingMode: 'fixed' | 'proportional' | 'percentage';
+    fixedSize?: number;
+    proportionMultiplier?: number;
+    portfolioPercentage?: number;
+    maxPositionSize?: number;
+    minTradeSize?: number;
+    stopLossPercent?: number;
+    takeProfitPercent?: number;
+  }) {
+    return this.request<{
+      id: string;
+      targetWallet: string;
+      targetLabel?: string;
+      enabled: boolean;
+      sizingMode: string;
+      fixedSize: number;
+      proportionMultiplier: number;
+      portfolioPercentage: number;
+      maxPositionSize?: number;
+      minTradeSize: number;
+      stopLossPercent?: number;
+      takeProfitPercent?: number;
+      createdAt: string;
+      stats: Record<string, unknown>;
+    }>('POST', '/api/v1/sidex/copy-configs', params);
+  }
+
+  async getSidexCopyConfig(configId: string) {
+    return this.request<{
+      id: string;
+      targetWallet: string;
+      targetLabel?: string;
+      enabled: boolean;
+      sizingMode: string;
+      fixedSize: number;
+      proportionMultiplier: number;
+      portfolioPercentage: number;
+      maxPositionSize?: number;
+      minTradeSize: number;
+      stopLossPercent?: number;
+      takeProfitPercent?: number;
+      createdAt: string;
+      stats: Record<string, unknown>;
+    }>('GET', `/api/v1/sidex/copy-configs/${configId}`);
+  }
+
+  async toggleSidexCopyConfig(configId: string, enabled: boolean) {
+    return this.request<{ success: boolean; enabled: boolean; error?: string }>('POST', `/api/v1/sidex/copy-configs/${configId}/toggle`, { enabled });
+  }
+
+  async deleteSidexCopyConfig(configId: string) {
+    return this.request<{ success: boolean; error?: string }>('DELETE', `/api/v1/sidex/copy-configs/${configId}`);
+  }
+
+  async getSidexCopyTrades(configId?: string) {
+    const params = configId ? `?configId=${configId}` : '';
+    return this.request<Array<{
+      id: string;
+      configId: string;
+      targetWallet: string;
+      symbol: string;
+      side: 'buy' | 'sell';
+      originalSize: number;
+      copiedSize: number;
+      price: number;
+      pnl?: number;
+      status: 'pending' | 'executed' | 'skipped';
+      reason?: string;
+      timestamp: string;
+    }>>('GET', `/api/v1/sidex/copy-trades${params}`);
+  }
+
+  // ==================== Polymarket Markets ====================
+
+  async getPolymarketMarkets(params?: { active?: boolean; limit?: number }) {
+    const queryParams = new URLSearchParams();
+    if (params) {
+      if (params.active !== undefined) queryParams.set('active', String(params.active));
+      if (params.limit !== undefined) queryParams.set('limit', String(params.limit));
+    }
+    const queryString = queryParams.toString();
+    return this.request<Array<{
+      id: string;
+      question: string;
+      slug: string;
+      outcomes: Array<{
+        tokenId: string;
+        name: string;
+        price: number;
+      }>;
+      volume24h: number;
+      totalVolume: number;
+      liquidity: number;
+      endDate: string;
+      active: boolean;
+    }>>('GET', `/api/v1/sidex/polymarket/markets${queryString ? '?' + queryString : ''}`);
+  }
+
+  async searchPolymarketMarkets(query: string, limit?: number) {
+    const params = new URLSearchParams({ q: query });
+    if (limit) params.set('limit', String(limit));
+    return this.request<Array<{
+      id: string;
+      question: string;
+      slug: string;
+      outcomes: Array<{
+        tokenId: string;
+        name: string;
+        price: number;
+      }>;
+      volume24h: number;
+      totalVolume: number;
+      liquidity: number;
+      endDate: string;
+      active: boolean;
+    }>>('GET', `/api/v1/sidex/polymarket/markets/search?${params}`);
+  }
+
+  async getPolymarketMarket(marketId: string) {
+    return this.request<{
+      id: string;
+      question: string;
+      slug: string;
+      outcomes: Array<{
+        tokenId: string;
+        name: string;
+        price: number;
+      }>;
+      volume24h: number;
+      totalVolume: number;
+      liquidity: number;
+      endDate: string;
+      active: boolean;
+    }>('GET', `/api/v1/sidex/polymarket/markets/${marketId}`);
+  }
+
+  async getPolymarketUserTrades(wallet: string, limit?: number) {
+    const params = limit ? `?limit=${limit}` : '';
+    return this.request<Array<{
+      id: string;
+      marketId: string;
+      side: 'buy' | 'sell';
+      outcome: 'yes' | 'no';
+      size: number;
+      price: number;
+      timestamp: string;
+    }>>('GET', `/api/v1/sidex/polymarket/user/${wallet}/trades${params}`);
+  }
+
+  // ==================== Sidex Multi-Platform Trading ====================
+
+  async sidexTradePolymarket(params: {
+    marketId: string;
+    side: 'yes' | 'no';
+    shares: number;
+  }) {
+    return this.request<{
+      success: boolean;
+      positionId?: string;
+      marketId?: string;
+      side?: string;
+      shares?: number;
+      cost?: number;
+      timestamp?: string;
+      error?: string;
+    }>('POST', '/api/v1/sidex/trade/polymarket', params);
+  }
+
+  async sidexClosePolymarket(positionId: string) {
+    return this.request<{
+      success: boolean;
+      positionId?: string;
+      pnl?: number;
+      timestamp?: string;
+      error?: string;
+    }>('POST', '/api/v1/sidex/close/polymarket', { positionId });
+  }
+
+  async getSidexPolymarketPositions() {
+    return this.request<Array<{
+      id: string;
+      platform: 'polymarket';
+      marketId: string;
+      marketQuestion?: string;
+      outcome: 'yes' | 'no';
+      shares: number;
+      entryPrice: number;
+      currentPrice: number;
+      cost: number;
+      value: number;
+      pnl: number;
+      pnlPercent: number;
+      openedAt: string;
+    }>>('GET', '/api/v1/sidex/positions/polymarket');
+  }
+
+  async getSidexCryptoPositions() {
+    return this.request<Array<{
+      id: string;
+      platform: 'crypto';
+      symbol: string;
+      side: 'long' | 'short';
+      size: number;
+      entryPrice: number;
+      currentPrice: number;
+      pnl: number;
+      pnlPercent: number;
+      leverage: number;
+      openedAt: string;
+    }>>('GET', '/api/v1/sidex/positions/crypto');
+  }
+
+  // ==================== Sidex NL Strategies ====================
+
+  async createSidexNLStrategy(params: {
+    platform: 'polymarket' | 'crypto';
+    marketId?: string;
+    symbol?: string;
+    description: string;
+    capital: number;
+  }) {
+    return this.request<{
+      id: string;
+      name: string;
+      description: string;
+      platform: 'polymarket' | 'crypto';
+      marketId?: string;
+      symbol?: string;
+      rules: Array<{
+        action: 'buy' | 'sell' | 'hold';
+        side?: string;
+        amount: number | 'all' | 'half';
+        condition: {
+          type: string;
+          value: number;
+        };
+      }>;
+      capital: number;
+      status: 'running' | 'paused' | 'stopped';
+      createdAt: string;
+      stats: {
+        totalTrades: number;
+        totalPnl: number;
+        winRate: number;
+      };
+    }>('POST', '/api/v1/sidex/strategies', params);
+  }
+
+  async getSidexNLStrategies(platform?: 'polymarket' | 'crypto') {
+    const params = platform ? `?platform=${platform}` : '';
+    return this.request<Array<{
+      id: string;
+      name: string;
+      description: string;
+      platform: 'polymarket' | 'crypto';
+      marketId?: string;
+      symbol?: string;
+      rules: Array<{
+        action: 'buy' | 'sell' | 'hold';
+        side?: string;
+        amount: number | 'all' | 'half';
+        condition: {
+          type: string;
+          value: number;
+        };
+      }>;
+      capital: number;
+      status: 'running' | 'paused' | 'stopped';
+      createdAt: string;
+      stats: {
+        totalTrades: number;
+        totalPnl: number;
+        winRate: number;
+      };
+    }>>('GET', `/api/v1/sidex/nl-strategies${params}`);
+  }
+
+  async getSidexNLStrategy(strategyId: string) {
+    return this.request<{
+      id: string;
+      name: string;
+      description: string;
+      platform: 'polymarket' | 'crypto';
+      marketId?: string;
+      symbol?: string;
+      rules: Array<{
+        action: 'buy' | 'sell' | 'hold';
+        side?: string;
+        amount: number | 'all' | 'half';
+        condition: {
+          type: string;
+          value: number;
+        };
+      }>;
+      capital: number;
+      status: 'running' | 'paused' | 'stopped';
+      createdAt: string;
+      stats: {
+        totalTrades: number;
+        totalPnl: number;
+        winRate: number;
+      };
+    }>('GET', `/api/v1/sidex/nl-strategies/${strategyId}`);
+  }
+
+  async startSidexNLStrategy(strategyId: string) {
+    return this.request<{ success: boolean; error?: string }>('POST', `/api/v1/sidex/nl-strategies/${strategyId}/start`);
+  }
+
+  async stopSidexNLStrategy(strategyId: string) {
+    return this.request<{ success: boolean; error?: string }>('POST', `/api/v1/sidex/nl-strategies/${strategyId}/stop`);
+  }
+
+  async deleteSidexNLStrategy(strategyId: string) {
+    return this.request<{ success: boolean; error?: string }>('DELETE', `/api/v1/sidex/nl-strategies/${strategyId}`);
+  }
+
+  async getSidexStrategyTrades(strategyId?: string) {
+    const params = strategyId ? `?strategyId=${strategyId}` : '';
+    return this.request<Array<{
+      id: string;
+      strategyId: string;
+      platform: 'polymarket' | 'crypto';
+      marketId?: string;
+      symbol?: string;
+      action: 'buy' | 'sell';
+      side?: string;
+      amount: number;
+      price: number;
+      pnl?: number;
+      rule: {
+        action: string;
+        condition: {
+          type: string;
+          value: number;
+        };
+      };
+      timestamp: string;
+    }>>('GET', `/api/v1/sidex/strategy-trades${params}`);
+  }
+
+  // ==================== Sidex Multi-Platform Copy Trading ====================
+
+  async createSidexPolymarketCopyConfig(params: {
+    targetWallet: string;
+    targetLabel?: string;
+    sizingMode: 'fixed' | 'proportional' | 'percentage';
+    fixedSize?: number;
+    proportionMultiplier?: number;
+    portfolioPercentage?: number;
+    maxPositionSize?: number;
+    minTradeSize?: number;
+    stopLossPercent?: number;
+    takeProfitPercent?: number;
+  }) {
+    return this.request<{
+      id: string;
+      platform: 'polymarket';
+      targetWallet: string;
+      targetLabel?: string;
+      enabled: boolean;
+      sizingMode: string;
+      fixedSize: number;
+      proportionMultiplier: number;
+      portfolioPercentage: number;
+      maxPositionSize?: number;
+      minTradeSize: number;
+      stopLossPercent?: number;
+      takeProfitPercent?: number;
+      createdAt: string;
+      stats: {
+        totalCopied: number;
+        totalSkipped: number;
+        totalPnl: number;
+        winRate: number;
+      };
+    }>('POST', '/api/v1/sidex/copy-configs/polymarket', params);
+  }
+
+  async getSidexPolymarketCopyConfigs() {
+    return this.request<Array<{
+      id: string;
+      platform: 'polymarket';
+      targetWallet: string;
+      targetLabel?: string;
+      enabled: boolean;
+      sizingMode: 'fixed' | 'proportional' | 'percentage';
+      fixedSize: number;
+      proportionMultiplier: number;
+      portfolioPercentage: number;
+      maxPositionSize?: number;
+      minTradeSize: number;
+      stopLossPercent?: number;
+      takeProfitPercent?: number;
+      createdAt: string;
+      stats: {
+        totalCopied: number;
+        totalSkipped: number;
+        totalPnl: number;
+        winRate: number;
+      };
+    }>>('GET', '/api/v1/sidex/copy-configs/polymarket');
+  }
+
+  async getSidexCryptoCopyConfigs() {
+    return this.request<Array<{
+      id: string;
+      platform: 'crypto';
+      targetWallet: string;
+      targetLabel?: string;
+      enabled: boolean;
+      sizingMode: 'fixed' | 'proportional' | 'percentage';
+      fixedSize: number;
+      proportionMultiplier: number;
+      portfolioPercentage: number;
+      maxPositionSize?: number;
+      minTradeSize: number;
+      stopLossPercent?: number;
+      takeProfitPercent?: number;
+      createdAt: string;
+      stats: {
+        totalCopied: number;
+        totalSkipped: number;
+        totalPnl: number;
+        winRate: number;
+      };
+    }>>('GET', '/api/v1/sidex/copy-configs/crypto');
   }
 }
 

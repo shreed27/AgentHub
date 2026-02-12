@@ -1,0 +1,2100 @@
+"use client";
+
+import React, { useState, useEffect, useCallback, ReactNode } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  TrendingUp,
+  TrendingDown,
+  Activity,
+  DollarSign,
+  Gauge,
+  Target,
+  X,
+  Plus,
+  RefreshCw,
+  AlertTriangle,
+  Zap,
+  RotateCcw,
+  Bot,
+  Users,
+  Play,
+  Pause,
+  Square,
+  Trash2,
+  Copy,
+  ToggleLeft,
+  ToggleRight,
+  Wifi,
+  WifiOff,
+  Search,
+  Sparkles,
+  MessageSquare,
+  ChevronRight,
+  Crown,
+  History,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import api from "@/lib/api";
+import { CyberButton } from "@/components/ui/CyberButton";
+
+// ==================== Types ====================
+
+type Platform = "polymarket" | "crypto";
+
+interface PolymarketMarket {
+  id: string;
+  question: string;
+  slug: string;
+  outcomes: Array<{
+    tokenId: string;
+    name: string;
+    price: number;
+  }>;
+  volume24h: number;
+  totalVolume: number;
+  volume?: number; // Added for compatibility
+  liquidity: number;
+  endDate: string;
+  active: boolean;
+}
+
+interface SidexPosition {
+  id: string;
+  platform: Platform;
+  // Crypto fields
+  symbol?: string;
+  side?: "long" | "short";
+  leverage?: number;
+  // Polymarket fields
+  marketId?: string;
+  marketQuestion?: string;
+  outcome?: "yes" | "no";
+  shares?: number;
+  cost?: number;
+  value?: number;
+  // Common fields
+  size: number;
+  entryPrice: number;
+  currentPrice: number;
+  pnl: number;
+  pnlPercent: number;
+  openedAt: string;
+  source?: "manual" | "agent" | "copy" | "strategy";
+  agentId?: string;
+  copyConfigId?: string;
+  strategyId?: string;
+}
+
+interface SidexBalance {
+  total: number;
+  available: number;
+  inPositions: number;
+  pnl: number;
+  pnlPercent: number;
+}
+
+interface PriceData {
+  symbol: string;
+  price: number;
+  change24h: number;
+  changePercent24h: number;
+  high24h: number;
+  low24h: number;
+  volume24h: number;
+  timestamp: number;
+}
+
+interface SidexAgent {
+  id: string;
+  name: string;
+  strategy: string;
+  status: "running" | "paused" | "stopped";
+  capital: number;
+  currentCapital: number;
+  riskLevel: "conservative" | "moderate" | "aggressive";
+  createdAt: string;
+  lastTradeAt?: string;
+  stats: {
+    totalTrades: number;
+    winningTrades: number;
+    losingTrades: number;
+    totalPnl: number;
+    winRate: number;
+  };
+}
+
+interface AgentTrade {
+  id: string;
+  agentId: string;
+  symbol: string;
+  side: "buy" | "sell";
+  amount: number;
+  price: number;
+  pnl?: number;
+  timestamp: string;
+  reason?: string;
+}
+
+interface CopyConfig {
+  id: string;
+  platform: Platform;
+  targetWallet: string;
+  targetLabel?: string;
+  enabled: boolean;
+  sizingMode: "fixed" | "proportional" | "percentage";
+  fixedSize: number;
+  portfolioPercentage: number;
+  createdAt: string;
+  stats: {
+    totalCopied: number;
+    totalSkipped: number;
+    totalPnl: number;
+    winRate: number;
+  };
+}
+
+interface NLStrategy {
+  id: string;
+  name: string;
+  description: string;
+  platform: Platform;
+  marketId?: string;
+  symbol?: string;
+  rules: Array<{
+    action: "buy" | "sell" | "hold";
+    side?: string;
+    amount: number | "all" | "half";
+    condition: {
+      type: string;
+      value: number;
+    };
+  }>;
+  capital: number;
+  status: "running" | "paused" | "stopped";
+  createdAt: string;
+  stats: {
+    totalTrades: number;
+    totalPnl: number;
+    winRate: number;
+  };
+}
+
+interface StrategyTrade {
+  id: string;
+  strategyId: string;
+  platform: Platform;
+  marketId?: string;
+  symbol?: string;
+  action: "buy" | "sell";
+  side?: string;
+  amount: number;
+  price: number;
+  pnl?: number;
+  rule: {
+    action: string;
+    condition: {
+      type: string;
+      value: number;
+    };
+  };
+  timestamp: string;
+}
+
+interface CopyTrade {
+  id: string;
+  configId: string;
+  targetWallet: string;
+  symbol: string;
+  side: "buy" | "sell";
+  originalSize: number;
+  copiedSize: number;
+  price: number;
+  status: "pending" | "executed" | "skipped";
+  reason?: string;
+  timestamp: string;
+}
+
+type TabType = "manual" | "agents" | "copy";
+
+// ==================== Main Component ====================
+
+export default function SidexPage() {
+  const [activeTab, setActiveTab] = useState<TabType>("manual");
+  const [platform, setPlatform] = useState<Platform>("polymarket");
+  const [positions, setPositions] = useState<SidexPosition[]>([]);
+  const [balance, setBalance] = useState<SidexBalance | null>(null);
+  const [prices, setPrices] = useState<Record<string, PriceData>>({});
+  const [pricesConnected, setPricesConnected] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [showNewPosition, setShowNewPosition] = useState(false);
+  const [simulationMode, setSimulationMode] = useState(true);
+  const [executing, setExecuting] = useState(false);
+
+  // Polymarket state
+  const [polymarkets, setPolymarkets] = useState<PolymarketMarket[]>([]);
+  const [polymarketSearch, setPolymarketSearch] = useState("");
+  const [selectedMarket, setSelectedMarket] = useState<PolymarketMarket | null>(null);
+
+  // AI Agent state (legacy - for preset strategies)
+  const [agents, setAgents] = useState<SidexAgent[]>([]);
+  const [agentTrades, setAgentTrades] = useState<AgentTrade[]>([]);
+  const [showNewAgent, setShowNewAgent] = useState(false);
+
+  // NL Strategy state (new - natural language)
+  const [nlStrategies, setNlStrategies] = useState<NLStrategy[]>([]);
+  const [strategyTrades, setStrategyTrades] = useState<StrategyTrade[]>([]);
+  const [showNewStrategy, setShowNewStrategy] = useState(false);
+
+  // Copy Trading state
+  const [copyConfigs, setCopyConfigs] = useState<CopyConfig[]>([]);
+  const [copyTrades, setCopyTrades] = useState<CopyTrade[]>([]);
+  const [showNewCopyConfig, setShowNewCopyConfig] = useState(false);
+
+  // Forms
+  const [newPosition, setNewPosition] = useState({
+    symbol: "BTC/USDT",
+    side: "long" as "long" | "short",
+    amount: 100,
+    leverage: 10,
+  });
+
+  const [newAgent, setNewAgent] = useState({
+    name: "",
+    strategy: "momentum" as "dca" | "momentum" | "mean_reversion" | "whale_follow",
+    capital: 1000,
+    riskLevel: "moderate" as "conservative" | "moderate" | "aggressive",
+    stopLossPercent: 10,
+    takeProfitPercent: 20,
+  });
+
+  const [newCopyConfig, setNewCopyConfig] = useState({
+    platform: "polymarket" as Platform,
+    targetWallet: "",
+    targetLabel: "",
+    sizingMode: "fixed" as "fixed" | "proportional" | "percentage",
+    fixedSize: 100,
+    portfolioPercentage: 5,
+  });
+
+  // Polymarket position form
+  const [newPolyPosition, setNewPolyPosition] = useState({
+    marketId: "",
+    side: "yes" as "yes" | "no",
+    shares: 100,
+  });
+
+  // NL Strategy form
+  const [newStrategy, setNewStrategy] = useState({
+    platform: "polymarket" as Platform,
+    marketId: "",
+    symbol: "BTC/USDT",
+    description: "",
+    capital: 500,
+  });
+
+  // ==================== Data Loading ====================
+
+  const loadPrices = useCallback(async () => {
+    try {
+      const res = await api.getSidexPrices();
+      if (res.success && res.data) {
+        setPrices(res.data.prices);
+        setPricesConnected(res.data.connected);
+      }
+    } catch (error) {
+      console.error("Error loading prices:", error);
+    }
+  }, []);
+
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [positionsRes, balanceRes, simStatusRes, pricesRes] = await Promise.all([
+        api.getSidexPositions(),
+        api.getSidexBalance(),
+        api.getSidexSimulationStatus(),
+        api.getSidexPrices(),
+      ]);
+
+      if (positionsRes.success && positionsRes.data) {
+        const rawData = positionsRes.data as SidexPosition[] | { data?: SidexPosition[] };
+        const posData = Array.isArray(rawData) ? rawData : (rawData.data || []);
+        // Ensure each position has a platform field
+        setPositions(posData.map(p => ({ ...p, platform: p.platform || 'crypto' as Platform })));
+      }
+      if (balanceRes.success && balanceRes.data) {
+        const rawData = balanceRes.data as SidexBalance | { data?: SidexBalance } | undefined;
+        const balanceData = rawData && 'data' in rawData ? rawData.data : rawData as SidexBalance | undefined;
+        setBalance(balanceData || null);
+      }
+      if (simStatusRes.success) {
+        setSimulationMode(simStatusRes.data?.enabled ?? true);
+      }
+      if (pricesRes.success && pricesRes.data) {
+        setPrices(pricesRes.data.prices);
+        setPricesConnected(pricesRes.data.connected);
+      }
+    } catch (error) {
+      console.error("Error loading Sidex data:", error);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const loadAgents = useCallback(async () => {
+    try {
+      const [agentsRes, tradesRes] = await Promise.all([
+        api.getSidexAgents(),
+        api.getSidexAgentTrades(),
+      ]);
+
+      if (agentsRes.success) {
+        setAgents(agentsRes.data || []);
+      }
+      if (tradesRes.success) {
+        setAgentTrades(tradesRes.data || []);
+      }
+    } catch (error) {
+      console.error("Error loading agents:", error);
+    }
+  }, []);
+
+  const loadCopyTrading = useCallback(async () => {
+    try {
+      const [configsRes, tradesRes] = await Promise.all([
+        api.getSidexCopyConfigs(),
+        api.getSidexCopyTrades(),
+      ]);
+
+      if (configsRes.success) {
+        setCopyConfigs((configsRes.data || []).map(c => ({ ...c, platform: (c as any).platform || 'crypto' })));
+      }
+      if (tradesRes.success) {
+        setCopyTrades(tradesRes.data || []);
+      }
+    } catch (error) {
+      console.error("Error loading copy trading:", error);
+    }
+  }, []);
+
+  const loadPolymarkets = useCallback(async () => {
+    try {
+      const res = await api.getPolymarketMarkets({ active: true, limit: 50 });
+      if (res.success && res.data) {
+        setPolymarkets(res.data);
+      }
+    } catch (error) {
+      console.error("Error loading Polymarket markets:", error);
+    }
+  }, []);
+
+  const searchPolymarkets = useCallback(async (query: string) => {
+    if (!query.trim()) {
+      loadPolymarkets();
+      return;
+    }
+    try {
+      const res = await api.searchPolymarketMarkets(query, 20);
+      if (res.success && res.data) {
+        setPolymarkets(res.data);
+      }
+    } catch (error) {
+      console.error("Error searching Polymarket markets:", error);
+    }
+  }, [loadPolymarkets]);
+
+  const loadNLStrategies = useCallback(async () => {
+    try {
+      const [strategiesRes, tradesRes] = await Promise.all([
+        api.getSidexNLStrategies(),
+        api.getSidexStrategyTrades(),
+      ]);
+
+      if (strategiesRes.success) {
+        setNlStrategies(strategiesRes.data || []);
+      }
+      if (tradesRes.success) {
+        setStrategyTrades(tradesRes.data || []);
+      }
+    } catch (error) {
+      console.error("Error loading NL strategies:", error);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadData();
+    loadAgents();
+    loadCopyTrading();
+    loadPolymarkets();
+    loadNLStrategies();
+
+    // Auto-refresh prices every 2 seconds
+    const priceInterval = setInterval(loadPrices, 2000);
+    // Auto-refresh Polymarket markets every 30 seconds
+    const polyInterval = setInterval(loadPolymarkets, 30000);
+    // Auto-refresh data every 5 seconds
+    const dataInterval = setInterval(() => {
+      loadData();
+      if (activeTab === "agents") {
+        loadAgents();
+        loadNLStrategies();
+      }
+      if (activeTab === "copy") loadCopyTrading();
+    }, 5000);
+
+    return () => {
+      clearInterval(priceInterval);
+      clearInterval(polyInterval);
+      clearInterval(dataInterval);
+    };
+  }, [loadData, loadPrices, loadAgents, loadCopyTrading, loadPolymarkets, loadNLStrategies, activeTab]);
+
+  // ==================== Actions ====================
+
+  const connectPrices = async () => {
+    try {
+      await api.connectSidexPrices();
+      setPricesConnected(true);
+    } catch (error) {
+      console.error("Error connecting prices:", error);
+    }
+  };
+
+  const openPosition = async () => {
+    if (executing) return;
+    setExecuting(true);
+
+    try {
+      const result = await api.sidexTrade({
+        symbol: newPosition.symbol,
+        side: newPosition.side === "long" ? "buy" : "sell",
+        amount: newPosition.amount,
+        leverage: newPosition.leverage,
+      });
+
+      if (result.success) {
+        setShowNewPosition(false);
+        loadData();
+      } else {
+        alert(result.error || "Trade failed");
+      }
+    } catch (error) {
+      console.error("Error opening position:", error);
+    } finally {
+      setExecuting(false);
+    }
+  };
+
+  const closePosition = async (position: SidexPosition) => {
+    try {
+      const result = await api.sidexClose({
+        symbol: position.symbol || '',
+        direction: position.side || 'long',
+      });
+
+      if (result.success) {
+        loadData();
+      }
+    } catch (error) {
+      console.error("Error closing position:", error);
+    }
+  };
+
+  const toggleSimulation = async () => {
+    try {
+      const result = await api.toggleSidexSimulation(!simulationMode);
+      if (result.success) {
+        setSimulationMode(!simulationMode);
+      }
+    } catch (error) {
+      console.error("Error toggling simulation:", error);
+    }
+  };
+
+  const resetAccount = async () => {
+    if (!confirm("Reset account? This will close all positions and reset balance to $10,000.")) {
+      return;
+    }
+    try {
+      const result = await api.resetSidexAccount();
+      if (result.success) {
+        loadData();
+        loadAgents();
+        loadCopyTrading();
+      }
+    } catch (error) {
+      console.error("Error resetting account:", error);
+    }
+  };
+
+  // Agent actions
+  const createAgent = async () => {
+    if (!newAgent.name) {
+      alert("Please enter an agent name");
+      return;
+    }
+
+    try {
+      const result = await api.createSidexAgent({
+        name: newAgent.name,
+        strategy: newAgent.strategy,
+        capital: newAgent.capital,
+        riskLevel: newAgent.riskLevel,
+        stopLossPercent: newAgent.stopLossPercent,
+        takeProfitPercent: newAgent.takeProfitPercent,
+      });
+
+      if (result.success) {
+        setShowNewAgent(false);
+        setNewAgent({
+          name: "",
+          strategy: "momentum",
+          capital: 1000,
+          riskLevel: "moderate",
+          stopLossPercent: 10,
+          takeProfitPercent: 20,
+        });
+        loadAgents();
+      }
+    } catch (error) {
+      console.error("Error creating agent:", error);
+    }
+  };
+
+  const toggleAgent = async (agent: SidexAgent) => {
+    try {
+      if (agent.status === "running") {
+        await api.pauseSidexAgent(agent.id);
+      } else {
+        await api.startSidexAgent(agent.id);
+      }
+      loadAgents();
+    } catch (error) {
+      console.error("Error toggling agent:", error);
+    }
+  };
+
+  const deleteAgent = async (agentId: string) => {
+    if (!confirm("Delete this agent?")) return;
+    try {
+      await api.deleteSidexAgent(agentId);
+      loadAgents();
+    } catch (error) {
+      console.error("Error deleting agent:", error);
+    }
+  };
+
+  // Copy trading actions
+  const createCopyConfig = async () => {
+    if (!newCopyConfig.targetWallet) {
+      alert("Please enter a wallet address");
+      return;
+    }
+
+    try {
+      const result = await api.createSidexCopyConfig({
+        targetWallet: newCopyConfig.targetWallet,
+        targetLabel: newCopyConfig.targetLabel || undefined,
+        sizingMode: newCopyConfig.sizingMode,
+        fixedSize: newCopyConfig.fixedSize,
+        portfolioPercentage: newCopyConfig.portfolioPercentage,
+      });
+
+      if (result.success) {
+        setShowNewCopyConfig(false);
+        setNewCopyConfig({
+          platform: "polymarket" as Platform,
+          targetWallet: "",
+          targetLabel: "",
+          sizingMode: "fixed",
+          fixedSize: 100,
+          portfolioPercentage: 5,
+        });
+        loadCopyTrading();
+      }
+    } catch (error) {
+      console.error("Error creating copy config:", error);
+    }
+  };
+
+  const toggleCopyConfig = async (configId: string, enabled: boolean) => {
+    try {
+      await api.toggleSidexCopyConfig(configId, !enabled);
+      loadCopyTrading();
+    } catch (error) {
+      console.error("Error toggling copy config:", error);
+    }
+  };
+
+  const deleteCopyConfig = async (configId: string) => {
+    if (!confirm("Delete this copy config?")) return;
+    try {
+      await api.deleteSidexCopyConfig(configId);
+      loadCopyTrading();
+    } catch (error) {
+      console.error("Error deleting copy config:", error);
+    }
+  };
+
+  // Polymarket actions
+  const openPolymarketPosition = async () => {
+    if (executing || !selectedMarket) return;
+    setExecuting(true);
+
+    try {
+      const result = await api.sidexTradePolymarket({
+        marketId: selectedMarket.id,
+        side: newPolyPosition.side,
+        shares: newPolyPosition.shares,
+      });
+
+      if (result.success) {
+        setShowNewPosition(false);
+        setSelectedMarket(null);
+        loadData();
+      } else {
+        alert(result.error || "Trade failed");
+      }
+    } catch (error) {
+      console.error("Error opening Polymarket position:", error);
+    } finally {
+      setExecuting(false);
+    }
+  };
+
+  const closePolymarketPosition = async (positionId: string) => {
+    try {
+      const result = await api.sidexClosePolymarket(positionId);
+      if (result.success) {
+        loadData();
+      }
+    } catch (error) {
+      console.error("Error closing Polymarket position:", error);
+    }
+  };
+
+  // NL Strategy actions
+  const createNLStrategy = async () => {
+    if (!newStrategy.description.trim()) {
+      alert("Please describe your strategy in natural language");
+      return;
+    }
+
+    if (newStrategy.platform === "polymarket" && !newStrategy.marketId) {
+      alert("Please select a market for your Polymarket strategy");
+      return;
+    }
+
+    try {
+      const result = await api.createSidexNLStrategy({
+        platform: newStrategy.platform,
+        marketId: newStrategy.platform === "polymarket" ? newStrategy.marketId : undefined,
+        symbol: newStrategy.platform === "crypto" ? newStrategy.symbol : undefined,
+        description: newStrategy.description,
+        capital: newStrategy.capital,
+      });
+
+      if (result.success) {
+        setShowNewStrategy(false);
+        setNewStrategy({
+          platform: "polymarket",
+          marketId: "",
+          symbol: "BTC/USDT",
+          description: "",
+          capital: 500,
+        });
+        loadNLStrategies();
+      } else {
+        alert((result as any).error || "Strategy creation failed");
+      }
+    } catch (error) {
+      console.error("Error creating NL strategy:", error);
+    }
+  };
+
+  const toggleNLStrategy = async (strategy: NLStrategy) => {
+    try {
+      if (strategy.status === "running") {
+        await api.stopSidexNLStrategy(strategy.id);
+      } else {
+        await api.startSidexNLStrategy(strategy.id);
+      }
+      loadNLStrategies();
+    } catch (error) {
+      console.error("Error toggling NL strategy:", error);
+    }
+  };
+
+  const deleteNLStrategy = async (strategyId: string) => {
+    if (!confirm("Delete this strategy?")) return;
+    try {
+      await api.deleteSidexNLStrategy(strategyId);
+      loadNLStrategies();
+    } catch (error) {
+      console.error("Error deleting NL strategy:", error);
+    }
+  };
+
+  // ==================== Computed Values ====================
+
+  const priceList = Object.values(prices);
+  const selectedCryptoMarket = priceList.find((m) => m.symbol === newPosition.symbol) || {
+    symbol: newPosition.symbol,
+    price: 0,
+  };
+
+  // Filter positions by platform
+  const platformPositions = positions.filter((p) =>
+    platform === "polymarket" ? p.platform === "polymarket" : p.platform === "crypto" || !p.platform
+  );
+
+  // Filter strategies by platform
+  const platformStrategies = nlStrategies.filter((s) => s.platform === platform);
+
+  // Filter copy configs by platform
+  const platformCopyConfigs = copyConfigs.filter((c) => c.platform === platform);
+
+  const stats = {
+    totalPositions: positions.length,
+    totalPnl: positions.reduce((sum, p) => sum + p.pnl, 0),
+    winRate: positions.length > 0
+      ? positions.filter((p) => p.pnl > 0).length / positions.length
+      : 0,
+    avgLeverage: positions.length > 0
+      ? positions.reduce((sum, p) => sum + (p.leverage || 1), 0) / positions.length
+      : 0,
+  };
+
+  // ==================== Render ====================
+
+  return (
+    <div className="min-h-screen pb-20">
+      {/* Main Container */}
+      <div className="max-w-[1400px] mx-auto px-6 md:px-8 lg:px-12 pt-8">
+
+        {/* Header Section */}
+        <header className="mb-12">
+          <div className="flex items-start justify-between mb-8">
+            <div>
+              <div className="flex items-center gap-3 mb-3">
+                <div className="h-1 w-8 bg-white rounded-full" />
+                <span className="text-[10px] font-bold text-[#71717a] uppercase tracking-[0.3em]">Market Intelligence</span>
+              </div>
+              <h1 className="text-[56px] md:text-[72px] font-bold text-white leading-[0.95] tracking-tight mb-4">
+                Execution<br />Command.
+              </h1>
+              <p className="text-[15px] text-[#a1a1aa] font-medium max-w-2xl leading-relaxed">
+                Real-time performance monitoring across decentralized liquidity pools and autonomous trade agents.
+              </p>
+            </div>
+
+            {/* Platform Selector - Top Right */}
+            <div className="flex flex-col gap-4">
+              <div className="flex bg-[#18181b] border border-white/[0.06] rounded-2xl p-1.5 backdrop-blur-xl">
+                {(["polymarket", "crypto"] as const).map((p) => (
+                  <button
+                    key={p}
+                    onClick={() => setPlatform(p)}
+                    className={cn(
+                      "px-6 py-2.5 text-[12px] font-bold rounded-xl transition-all duration-300 uppercase tracking-wider",
+                      platform === p
+                        ? "bg-white text-black"
+                        : "text-[#71717a] hover:text-white"
+                    )}
+                  >
+                    {p}
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={toggleSimulation}
+                  className={cn(
+                    "px-4 py-2 rounded-xl text-[11px] font-bold transition-all border uppercase tracking-wider",
+                    simulationMode
+                      ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
+                      : "bg-white/[0.03] border-white/[0.06] text-[#71717a] hover:text-white"
+                  )}
+                >
+                  <span className="flex items-center gap-2">
+                    <div className={cn("w-1.5 h-1.5 rounded-full", simulationMode ? "bg-emerald-400 animate-pulse" : "bg-[#52525b]")} />
+                    {simulationMode ? "Secure" : "Simulation"}
+                  </span>
+                </button>
+                <button
+                  onClick={resetAccount}
+                  className="p-2.5 rounded-xl bg-white/[0.03] border border-white/[0.06] text-[#71717a] hover:text-white transition-all"
+                  title="Reset"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        {/* Stats Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+          {/* Total P&L */}
+          <div className="bg-[#18181b] border border-white/[0.06] rounded-2xl p-6 relative overflow-hidden group">
+            <div className="flex items-start justify-between mb-4">
+              <span className="text-[10px] font-bold text-[#71717a] uppercase tracking-[0.2em]">Total P&L</span>
+              <span className={cn(
+                "text-[10px] font-bold px-2 py-0.5 rounded-md",
+                balance && balance.pnl >= 0 ? "bg-emerald-500/10 text-emerald-400" : "bg-rose-500/10 text-rose-400"
+              )}>
+                {balance && balance.pnl >= 0 ? "↑ 0.0%" : "↓ 0.0%"}
+              </span>
+            </div>
+            <div className="text-[32px] font-bold text-white tracking-tight mb-3">
+              ${balance?.total.toFixed(2) || "0.00"}
+            </div>
+            <div className="h-12 opacity-20">
+              <svg className="w-full h-full" viewBox="0 0 200 40" preserveAspectRatio="none">
+                <path d="M0,20 Q50,10 100,20 T200,20" fill="none" stroke="currentColor" strokeWidth="2" className="text-emerald-500" />
+              </svg>
+            </div>
+          </div>
+
+          {/* Total Volume */}
+          <div className="bg-[#18181b] border border-white/[0.06] rounded-2xl p-6 relative overflow-hidden">
+            <div className="flex items-start justify-between mb-4">
+              <span className="text-[10px] font-bold text-[#71717a] uppercase tracking-[0.2em]">Total Volume</span>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-500/10 text-blue-400">
+                ↑ 0.0%
+              </span>
+            </div>
+            <div className="text-[32px] font-bold text-white tracking-tight mb-3">
+              $0
+            </div>
+            <div className="h-12 opacity-20">
+              <svg className="w-full h-full" viewBox="0 0 200 40" preserveAspectRatio="none">
+                <path d="M0,25 Q50,15 100,25 T200,15" fill="none" stroke="currentColor" strokeWidth="2" className="text-blue-500" />
+              </svg>
+            </div>
+          </div>
+
+          {/* Active Positions */}
+          <div className="bg-[#18181b] border border-white/[0.06] rounded-2xl p-6 relative overflow-hidden">
+            <div className="flex items-start justify-between mb-4">
+              <span className="text-[10px] font-bold text-[#71717a] uppercase tracking-[0.2em]">Active Positions</span>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-purple-500/10 text-purple-400">
+                2.4%
+              </span>
+            </div>
+            <div className="text-[32px] font-bold text-white tracking-tight mb-3">
+              {positions.length}
+            </div>
+            <div className="h-12 opacity-20">
+              <svg className="w-full h-full" viewBox="0 0 200 40" preserveAspectRatio="none">
+                <path d="M0,30 Q50,20 100,25 T200,20" fill="none" stroke="currentColor" strokeWidth="2" className="text-purple-500" />
+              </svg>
+            </div>
+          </div>
+
+          {/* Avg Latency */}
+          <div className="bg-[#18181b] border border-white/[0.06] rounded-2xl p-6 relative overflow-hidden">
+            <div className="flex items-start justify-between mb-4">
+              <span className="text-[10px] font-bold text-[#71717a] uppercase tracking-[0.2em]">Avg Latency</span>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-orange-500/10 text-orange-400">
+                ↓ 1.2%
+              </span>
+            </div>
+            <div className="text-[32px] font-bold text-white tracking-tight mb-3">
+              42ms
+            </div>
+            <div className="h-12 opacity-20">
+              <svg className="w-full h-full" viewBox="0 0 200 40" preserveAspectRatio="none">
+                <path d="M0,15 Q50,25 100,15 T200,25" fill="none" stroke="currentColor" strokeWidth="2" className="text-orange-500" />
+              </svg>
+            </div>
+          </div>
+        </div>
+
+        {/* Tabs Control */}
+        <div className="flex items-center gap-10 border-b border-white/[0.06] px-2 mb-4">
+          {(["manual", "agents", "copy"] as const).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={cn(
+                "pb-6 text-[11px] font-bold uppercase tracking-[0.2em] relative transition-all duration-300",
+                activeTab === tab ? "text-white" : "text-[#52525b] hover:text-[#a1a1aa]"
+              )}
+            >
+              {tab}
+              {activeTab === tab && (
+                <motion.div
+                  layoutId="sidex-tab-indicator"
+                  className="absolute bottom-[-1px] left-0 right-0 h-[2px] bg-white shadow-[0_0_15px_rgba(255,255,255,0.5)]"
+                />
+              )}
+            </button>
+          ))}
+        </div>
+
+        {/* Tab Content Area */}
+        <div className="relative">
+          <div className="absolute top-0 left-0 w-[1px] h-full bg-gradient-to-b from-gold/50 via-transparent to-transparent opacity-20" />
+          <AnimatePresence mode="wait">
+            {activeTab === "manual" && (
+              <ManualTradingTab
+                key="manual"
+                platform={platform}
+                positions={platformPositions}
+                balance={balance}
+                prices={priceList}
+                polymarkets={polymarkets}
+                polymarketSearch={polymarketSearch}
+                onSearchPolymarkets={(q) => {
+                  setPolymarketSearch(q);
+                  searchPolymarkets(q);
+                }}
+                onSelectMarket={(market) => {
+                  setSelectedMarket(market);
+                  setNewPolyPosition({ ...newPolyPosition, marketId: market.id });
+                  setShowNewPosition(true);
+                }}
+                loading={loading}
+                onOpenPosition={() => setShowNewPosition(true)}
+                onClosePosition={platform === "polymarket" ? (p) => closePolymarketPosition(p.id) : closePosition}
+              />
+            )}
+
+            {activeTab === "agents" && (
+              <AIAgentsTab
+                key="agents"
+                platform={platform}
+                agents={agents}
+                agentTrades={agentTrades}
+                nlStrategies={platformStrategies}
+                strategyTrades={strategyTrades.filter((t) => t.platform === platform)}
+                polymarkets={polymarkets}
+                prices={priceList}
+                onCreateAgent={() => setShowNewAgent(true)}
+                onToggleAgent={toggleAgent}
+                onDeleteAgent={deleteAgent}
+                onCreateStrategy={() => {
+                  setNewStrategy({ ...newStrategy, platform });
+                  setShowNewStrategy(true);
+                }}
+                onToggleStrategy={toggleNLStrategy}
+                onDeleteStrategy={deleteNLStrategy}
+              />
+            )}
+
+            {activeTab === "copy" && (
+              <CopyTradingTab
+                key="copy"
+                platform={platform}
+                copyConfigs={platformCopyConfigs}
+                copyTrades={copyTrades.filter((t) => {
+                  const config = copyConfigs.find((c) => c.id === t.configId);
+                  return config?.platform === platform;
+                })}
+                onCreateConfig={() => {
+                  setNewCopyConfig({ ...newCopyConfig, platform });
+                  setShowNewCopyConfig(true);
+                }}
+                onToggleConfig={toggleCopyConfig}
+                onDeleteConfig={deleteCopyConfig}
+              />
+            )}
+          </AnimatePresence>
+        </div>
+
+        {/* New Position Modal */}
+        <AnimatePresence>
+          {
+            showNewPosition && (
+              <Modal onClose={() => { setShowNewPosition(false); setSelectedMarket(null); }}>
+                <div className="mb-8">
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="w-2 h-2 bg-gold shadow-[0_0_8px_rgba(255,215,0,0.5)]" />
+                    <h2 className="text-[10px] font-orbitron text-gold uppercase tracking-[0.3em]">Module::Market_Entry</h2>
+                  </div>
+                  <h3 className="text-2xl font-black font-orbitron text-white uppercase tracking-tighter">
+                    {platform === "polymarket" ? "Reality_Swap" : "Asset_Engagement"}
+                  </h3>
+                </div>
+
+                {simulationMode && (
+                  <div className="p-3 bg-neon-red/10 border-l-2 border-neon-red flex items-center gap-4 text-[9px] font-orbitron text-neon-red uppercase tracking-widest mb-6">
+                    <AlertTriangle className="w-4 h-4" />
+                    Simulation_Matrix_Active // No_Risk_Detected
+                  </div>
+                )}
+
+                {platform === "polymarket" ? (
+                  /* Polymarket Trade Form */
+                  <div className="space-y-6">
+                    {selectedMarket ? (
+                      <div className="p-6 border border-white/10 bg-black/40 relative overflow-hidden group">
+                        <div className="absolute top-0 right-0 p-2 text-[8px] font-orbitron text-zinc-700 uppercase">Sector_0x{selectedMarket.id.slice(-4)}</div>
+                        <div className="text-[10px] font-orbitron text-zinc-500 uppercase tracking-widest mb-2">Current_Realm</div>
+                        <div className="text-sm font-bold text-white mb-4 leading-relaxed">{selectedMarket.question}</div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="p-3 bg-black/40 border-l border-neon-green/30">
+                            <span className="text-[8px] font-orbitron text-zinc-600 block mb-1">REALITY_YES</span>
+                            <span className="text-sm font-mono font-black text-neon-green">{(selectedMarket.outcomes.find(o => o.name === "Yes")?.price || 0).toFixed(2)}¢</span>
+                          </div>
+                          <div className="p-3 bg-black/40 border-l border-neon-red/30">
+                            <span className="text-[8px] font-orbitron text-zinc-600 block mb-1">REALITY_NO</span>
+                            <span className="text-sm font-mono font-black text-neon-red">{(selectedMarket.outcomes.find(o => o.name === "No")?.price || 0).toFixed(2)}¢</span>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="p-12 border border-dashed border-white/5 text-center">
+                        <p className="text-[10px] font-orbitron text-zinc-500 uppercase tracking-[0.4em]">Awaiting_Realm_Selection...</p>
+                      </div>
+                    )}
+
+                    <div>
+                      <label className="text-[10px] font-orbitron text-zinc-600 uppercase tracking-widest block mb-1">Outcome_Vector</label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          onClick={() => setNewPolyPosition({ ...newPolyPosition, side: "yes" })}
+                          className={cn(
+                            "py-4 text-[10px] font-orbitron uppercase tracking-widest transition-all clipped-tr",
+                            newPolyPosition.side === "yes"
+                              ? "bg-neon-green text-black font-black"
+                              : "bg-white/5 text-zinc-500 hover:text-white"
+                          )}
+                        >
+                          Affirmative (YES)
+                        </button>
+                        <button
+                          onClick={() => setNewPolyPosition({ ...newPolyPosition, side: "no" })}
+                          className={cn(
+                            "py-4 text-[10px] font-orbitron uppercase tracking-widest transition-all clipped-tr",
+                            newPolyPosition.side === "no"
+                              ? "bg-neon-red text-black font-black"
+                              : "bg-white/5 text-zinc-500 hover:text-white"
+                          )}
+                        >
+                          Negative (NO)
+                        </button>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-orbitron text-zinc-600 uppercase tracking-widest block mb-1">Volume (Shares)</label>
+                      <input
+                        type="number"
+                        value={newPolyPosition.shares}
+                        onChange={(e) => setNewPolyPosition({ ...newPolyPosition, shares: parseFloat(e.target.value) || 0 })}
+                        className="w-full bg-black/40 border border-white/5 py-4 px-4 text-xs font-mono text-white outline-none focus:border-gold/50 transition-all"
+                      />
+                    </div>
+
+                    {selectedMarket && (
+                      <div className="p-4 bg-white/5 border-l border-gold/30 space-y-2 text-[10px] font-mono">
+                        <div className="flex justify-between items-center text-zinc-500">
+                          <span>UNIT_COST</span>
+                          <span className="text-white">${((selectedMarket.outcomes.find(o => o.name === (newPolyPosition.side === "yes" ? "Yes" : "No"))?.price || 0)).toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between items-center text-zinc-500">
+                          <span>TOTAL_EXPOSURE</span>
+                          <span className="text-white">${(newPolyPosition.shares * (selectedMarket.outcomes.find(o => o.name === (newPolyPosition.side === "yes" ? "Yes" : "No"))?.price || 0)).toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between items-center text-neon-green font-bold border-t border-white/5 pt-2">
+                          <span>REWARD_CEILING</span>
+                          <span>${newPolyPosition.shares.toFixed(2)}</span>
+                        </div>
+                      </div>
+                    )}
+
+                    <button
+                      onClick={openPolymarketPosition}
+                      disabled={executing || !selectedMarket || newPolyPosition.shares <= 0}
+                      className="w-full py-4 bg-gold hover:bg-white text-black font-black font-orbitron text-xs uppercase tracking-[0.3em] transition-all clipped-tr disabled:opacity-20 shadow-[0_0_20px_rgba(255,215,0,0.2)] mt-4"
+                    >
+                      {executing ? "EXECUTING_HASH..." : "INITIALIZE_POSITION"}
+                    </button>
+                  </div>
+                ) : (
+                  /* Crypto Trade Form */
+                  <div className="space-y-6">
+                    <div>
+                      <label className="text-[10px] font-orbitron text-zinc-600 uppercase tracking-widest block mb-1">Target_Symbol</label>
+                      <select
+                        value={newPosition.symbol}
+                        onChange={(e) => setNewPosition({ ...newPosition, symbol: e.target.value })}
+                        className="w-full bg-black/40 border border-white/5 py-4 px-4 text-xs font-mono text-white outline-none focus:border-gold/50 appearance-none transition-all uppercase"
+                      >
+                        {priceList.map((p) => (
+                          <option key={p.symbol} value={p.symbol} className="bg-zinc-900">{p.symbol}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-orbitron text-zinc-600 uppercase tracking-widest block mb-1">Execution_Side</label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          onClick={() => setNewPosition({ ...newPosition, side: "long" })}
+                          className={cn(
+                            "py-4 text-[10px] font-orbitron uppercase tracking-widest transition-all clipped-tr",
+                            newPosition.side === "long" ? "bg-neon-green text-black font-black" : "bg-white/5 text-zinc-500 hover:text-white"
+                          )}
+                        >
+                          Expansion (LONG)
+                        </button>
+                        <button
+                          onClick={() => setNewPosition({ ...newPosition, side: "short" })}
+                          className={cn(
+                            "py-4 text-[10px] font-orbitron uppercase tracking-widest transition-all clipped-tr",
+                            newPosition.side === "short" ? "bg-neon-red text-black font-black" : "bg-white/5 text-zinc-500 hover:text-white"
+                          )}
+                        >
+                          Contraction (SHORT)
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-[10px] font-orbitron text-zinc-600 uppercase tracking-widest block mb-1">Magnitude (USD)</label>
+                        <input
+                          type="number"
+                          value={newPosition.amount}
+                          onChange={(e) => setNewPosition({ ...newPosition, amount: parseFloat(e.target.value) || 0 })}
+                          className="w-full bg-black/40 border border-white/5 py-4 px-4 text-xs font-mono text-white outline-none focus:border-gold/50 transition-all font-mono"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-orbitron text-zinc-600 uppercase tracking-widest block mb-1">Leverage_Amplification</label>
+                        <input
+                          type="number"
+                          value={newPosition.leverage}
+                          onChange={(e) => setNewPosition({ ...newPosition, leverage: parseInt(e.target.value) || 1 })}
+                          className="w-full bg-black/40 border border-white/5 py-4 px-4 text-xs font-mono text-white outline-none focus:border-gold/50 transition-all font-mono"
+                        />
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={openPosition}
+                      disabled={executing || newPosition.amount <= 0}
+                      className="w-full py-4 bg-gold hover:bg-white text-black font-black font-orbitron text-xs uppercase tracking-[0.3em] transition-all clipped-tr disabled:opacity-20 shadow-[0_0_20px_rgba(255,215,0,0.2)] mt-4"
+                    >
+                      {executing ? "EXECUTING_HASH..." : "EXECUTE_ENGAGEMENT"}
+                    </button>
+                  </div>
+                )}
+              </Modal>
+            )
+          }
+        </AnimatePresence >
+
+        {/* New Agent Modal */}
+        <AnimatePresence>
+          {
+            showNewAgent && (
+              <Modal onClose={() => setShowNewAgent(false)}>
+                <div className="mb-8">
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="w-2 h-2 bg-gold shadow-[0_0_8px_rgba(255,215,0,0.5)]" />
+                    <h2 className="text-[10px] font-orbitron text-gold uppercase tracking-[0.3em]">Module::Agent_Deploy</h2>
+                  </div>
+                  <h3 className="text-2xl font-black font-orbitron text-white uppercase tracking-tighter">Forge_Autonomous_Core</h3>
+                </div>
+
+                <div className="space-y-6">
+                  <div>
+                    <label className="text-[10px] font-orbitron text-zinc-600 uppercase tracking-widest block mb-1">Core_Alias</label>
+                    <input
+                      type="text"
+                      value={newAgent.name}
+                      onChange={(e) => setNewAgent({ ...newAgent, name: e.target.value })}
+                      placeholder="E.G. SENTINEL_X"
+                      className="w-full bg-black/40 border border-white/5 py-4 px-4 text-xs font-mono text-white outline-none focus:border-gold/50 transition-all uppercase"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] font-orbitron text-zinc-600 uppercase tracking-widest block mb-1">Algorithmic_Behavior</label>
+                    <select
+                      value={newAgent.strategy}
+                      onChange={(e) => setNewAgent({ ...newAgent, strategy: e.target.value as typeof newAgent.strategy })}
+                      className="w-full bg-black/40 border border-white/5 py-4 px-4 text-xs font-mono text-white outline-none focus:border-gold/50 appearance-none transition-all uppercase"
+                    >
+                      <option value="trend">Trend_Analysis</option>
+                      <option value="mean_reversion">Mean_Reversion</option>
+                      <option value="arbitrage">Vortex_Arbitrage</option>
+                      <option value="sentinel">Sentinel_Guard</option>
+                    </select>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-[10px] font-orbitron text-zinc-600 uppercase tracking-widest block mb-1">Initial_Fuel ($)</label>
+                      <input
+                        type="number"
+                        value={newAgent.capital}
+                        onChange={(e) => setNewAgent({ ...newAgent, capital: parseFloat(e.target.value) || 0 })}
+                        className="w-full bg-black/40 border border-white/5 py-4 px-4 text-xs font-mono text-white outline-none focus:border-gold/50 transition-all"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-orbitron text-zinc-600 uppercase tracking-widest block mb-1">Risk_Threshold</label>
+                      <select
+                        value={newAgent.riskLevel} // Assuming riskLevel is the correct prop name based on original code
+                        onChange={(e) => setNewAgent({ ...newAgent, riskLevel: e.target.value as typeof newAgent.riskLevel })}
+                        className="w-full bg-black/40 border border-white/5 py-4 px-4 text-xs font-mono text-white outline-none focus:border-gold/50 transition-all uppercase"
+                      >
+                        <option value="conservative">Passive</option>
+                        <option value="moderate">Balanced</option>
+                        <option value="aggressive">Aggressive</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={createAgent}
+                    className="w-full py-4 bg-gold hover:bg-white text-black font-black font-orbitron text-xs uppercase tracking-[0.2em] transition-all clipped-tr shadow-[0_0_20px_rgba(255,215,0,0.2)] mt-4"
+                  >
+                    DEACTIVATE_MANUAL // ENGAGE_AUTONOMOUS
+                  </button>
+                </div>
+              </Modal>
+            )
+          }
+        </AnimatePresence >
+
+        {/* New Copy Config Modal */}
+        <AnimatePresence>
+          {
+            showNewCopyConfig && (
+              <Modal onClose={() => setShowNewCopyConfig(false)}>
+                <div className="mb-8">
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="w-2 h-2 bg-gold" />
+                    <h2 className="text-[10px] font-orbitron text-gold uppercase tracking-[0.3em]">Module::Shadow_Sync</h2>
+                  </div>
+                  <h3 className="text-2xl font-black font-orbitron text-white uppercase tracking-tighter">Synchronize_Vessel</h3>
+                </div>
+
+                <div className="space-y-6">
+                  <div>
+                    <label className="text-[10px] font-orbitron text-zinc-600 uppercase tracking-widest block mb-1">Target_Vessel_ID (Wallet)</label>
+                    <input
+                      type="text"
+                      value={newCopyConfig.targetWallet}
+                      onChange={(e) => setNewCopyConfig({ ...newCopyConfig, targetWallet: e.target.value })}
+                      placeholder="0x..."
+                      className="w-full bg-black/40 border border-white/5 py-4 px-4 text-xs font-mono text-white outline-none focus:border-gold/50 transition-all"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] font-orbitron text-zinc-600 uppercase tracking-widest block mb-1">Mirror_Alias</label>
+                    <input
+                      type="text"
+                      value={newCopyConfig.targetLabel}
+                      onChange={(e) => setNewCopyConfig({ ...newCopyConfig, targetLabel: e.target.value })}
+                      className="w-full bg-black/40 border border-white/5 py-4 px-4 text-xs font-mono text-white outline-none focus:border-gold/50 transition-all"
+                    />
+                  </div>
+
+                  <button
+                    onClick={createCopyConfig}
+                    className="w-full py-4 bg-gold hover:bg-white text-black font-black font-orbitron text-xs uppercase tracking-[0.2em] transition-all clipped-tr shadow-[0_0_20px_rgba(255,215,0,0.2)] mt-4"
+                  >
+                    INITIALIZE_MIRROR_LINK
+                  </button>
+                </div>
+              </Modal>
+            )
+          }
+        </AnimatePresence>
+
+        {/* New Strategy Modal */}
+        <AnimatePresence>
+          {
+            showNewStrategy && (
+              <Modal onClose={() => setShowNewStrategy(false)}>
+                <div className="mb-8">
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="w-2 h-2 bg-gold animate-pulse shadow-[0_0_8px_rgba(255,215,0,0.5)]" />
+                    <h2 className="text-[10px] font-orbitron text-gold uppercase tracking-[0.3em]">Neural_Synthesis</h2>
+                  </div>
+                  <h3 className="text-2xl font-black font-orbitron text-white uppercase tracking-tighter">Forge_Strategy</h3>
+                </div>
+
+                <div className="space-y-6">
+                  <div>
+                    <label className="text-[10px] font-orbitron text-zinc-600 uppercase tracking-widest block mb-2">Sector_Access</label>
+                    <div className="grid grid-cols-2 gap-2 p-1 bg-black/60 border border-white/5">
+                      <button
+                        onClick={() => setNewStrategy({ ...newStrategy, platform: "polymarket" })}
+                        className={cn(
+                          "py-3 text-[10px] font-orbitron uppercase tracking-widest transition-all",
+                          newStrategy.platform === "polymarket" ? "bg-gold text-black font-black" : "text-zinc-500 hover:text-white"
+                        )}
+                      >
+                        Polymarket
+                      </button>
+                      <button
+                        onClick={() => setNewStrategy({ ...newStrategy, platform: "crypto" })}
+                        className={cn(
+                          "py-3 text-[10px] font-orbitron uppercase tracking-widest transition-all",
+                          newStrategy.platform === "crypto" ? "bg-gold text-black font-black" : "text-zinc-500 hover:text-white"
+                        )}
+                      >
+                        Crypto
+                      </button>
+                    </div>
+                  </div>
+
+                  {newStrategy.platform === "polymarket" ? (
+                    <div>
+                      <label className="text-[10px] font-orbitron text-zinc-600 uppercase tracking-widest block mb-2">Target_Prob_Realm</label>
+                      <select
+                        value={newStrategy.marketId}
+                        onChange={(e) => setNewStrategy({ ...newStrategy, marketId: e.target.value })}
+                        className="w-full bg-black/40 border border-white/5 py-4 px-4 text-xs font-mono text-white outline-none focus:border-gold/50 appearance-none transition-all"
+                      >
+                        <option value="" className="bg-zinc-900">SELECT_SECTOR...</option>
+                        {polymarkets.map((market) => (
+                          <option key={market.id} value={market.id} className="bg-zinc-900">
+                            {market.question.slice(0, 50)}...
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  ) : (
+                    <div>
+                      <label className="text-[10px] font-orbitron text-zinc-600 uppercase tracking-widest block mb-2">Target_Asset</label>
+                      <select
+                        value={newStrategy.symbol}
+                        onChange={(e) => setNewStrategy({ ...newStrategy, symbol: e.target.value })}
+                        className="w-full bg-black/40 border border-white/5 py-4 px-4 text-xs font-mono text-white outline-none focus:border-gold/50 appearance-none transition-all"
+                      >
+                        {priceList.map((p) => (
+                          <option key={p.symbol} value={p.symbol} className="bg-zinc-900">{p.symbol}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="text-[10px] font-orbitron text-zinc-600 uppercase tracking-widest block mb-2">Neural_Directives (NL)</label>
+                    <textarea
+                      value={newStrategy.description}
+                      onChange={(e) => setNewStrategy({ ...newStrategy, description: e.target.value })}
+                      placeholder="DESCRIBE_ALGORITHMIC_BEHAVIOR..."
+                      rows={4}
+                      className="w-full bg-black/40 border border-white/5 py-4 px-4 text-xs font-mono text-white outline-none focus:border-gold/50 resize-none transition-all"
+                    />
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {["BUY_LOW_SELL_HIGH", "TRAILING_STOP_10%", "DCA_HOURLY"].map(hint => (
+                        <button
+                          key={hint}
+                          onClick={() => setNewStrategy({ ...newStrategy, description: hint.replace(/_/g, " ") })}
+                          className="text-[8px] font-orbitron text-gold/50 hover:text-gold uppercase tracking-widest border border-gold/10 px-2 py-1 transition-all"
+                        >
+                          {hint}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] font-orbitron text-zinc-600 uppercase tracking-widest block mb-1">Execution_Capital ($)</label>
+                    <input
+                      type="number"
+                      value={newStrategy.capital}
+                      onChange={(e) => setNewStrategy({ ...newStrategy, capital: parseFloat(e.target.value) || 0 })}
+                      className="w-full bg-black/40 border border-white/5 py-4 px-4 text-xs font-mono text-white outline-none focus:border-gold/50 transition-all"
+                    />
+                  </div>
+
+                  <button
+                    onClick={createNLStrategy}
+                    className="w-full py-4 bg-gold hover:bg-white text-black font-black font-orbitron text-xs uppercase tracking-[0.2em] transition-all clipped-tr shadow-[0_0_20px_rgba(255,215,0,0.2)] mt-4"
+                  >
+                    INITIALIZE_NEURAL_POD
+                  </button>
+                </div>
+              </Modal>
+            )
+          }
+        </AnimatePresence >
+      </div>
+    </div>
+  );
+}
+
+// ==================== Sub-Components ====================
+
+function Modal({ children, onClose }: { children: ReactNode; onClose: () => void }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4 md:p-8"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ scale: 0.9, opacity: 0, y: 20 }}
+        animate={{ scale: 1, opacity: 1, y: 0 }}
+        exit={{ scale: 0.9, opacity: 0, y: 20 }}
+        className="bg-black/90 border border-gold/30 rounded-none p-8 w-full max-w-xl max-h-[90vh] overflow-y-auto relative shadow-[0_0_50px_rgba(255,215,0,0.1)] clipped-tr"
+        onClick={(e: React.MouseEvent) => e.stopPropagation()}
+      >
+        <div className="absolute top-0 left-0 w-16 h-[1px] bg-gold" />
+        <div className="absolute top-0 left-0 w-[1px] h-16 bg-gold" />
+
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 p-2 text-zinc-500 hover:text-white transition-colors"
+        >
+          <X className="w-5 h-5" />
+        </button>
+        {children}
+      </motion.div>
+    </motion.div>
+  );
+}
+
+function ManualTradingTab({
+  platform,
+  positions,
+  balance,
+  prices,
+  polymarkets,
+  polymarketSearch,
+  onSearchPolymarkets,
+  onSelectMarket,
+  loading,
+  onOpenPosition,
+  onClosePosition,
+}: {
+  platform: Platform;
+  positions: SidexPosition[];
+  balance: SidexBalance | null;
+  prices: PriceData[];
+  polymarkets: PolymarketMarket[];
+  polymarketSearch: string;
+  onSearchPolymarkets: (query: string) => void;
+  onSelectMarket: (market: PolymarketMarket) => void;
+  loading: boolean;
+  onOpenPosition: () => void;
+  onClosePosition: (position: SidexPosition) => void;
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 15 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -15 }}
+      transition={{ duration: 0.6, ease: [0.2, 0, 0, 1] }}
+      className="space-y-16"
+    >
+      {/* Markets Section */}
+      <section>
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-8 mb-10">
+          <div>
+            <h3 className="text-xl font-bold text-white tracking-tight">Instrument Selection</h3>
+            <p className="text-sm text-[#a1a1aa] mt-1">
+              Select an asset or prediction contract to initialize exposure.
+            </p>
+          </div>
+
+          <div className="flex flex-col md:flex-row gap-4 items-center">
+            {platform === "polymarket" && (
+              <div className="relative w-full md:w-80 group">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[#52525b] group-focus-within:text-white transition-colors" />
+                <input
+                  type="text"
+                  value={polymarketSearch}
+                  onChange={(e) => onSearchPolymarkets(e.target.value)}
+                  placeholder="Filter by question..."
+                  className="w-full bg-white/[0.03] border border-white/[0.08] rounded-2xl py-3 pl-12 pr-4 text-[13px] font-medium text-white placeholder:text-[#52525b] focus:border-white/20 outline-none transition-all"
+                />
+              </div>
+            )}
+            {platform === "crypto" && (
+              <CyberButton onClick={onOpenPosition} size="sm">
+                <Plus className="w-4 h-4 mr-2" />
+                Initialize Order
+              </CyberButton>
+            )}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {platform === "polymarket" ? (
+            polymarkets.map((market) => (
+              <div
+                key={market.id}
+                onClick={() => onSelectMarket(market)}
+                className="glass-card group cursor-pointer p-8 flex flex-col justify-between min-h-[220px]"
+              >
+                <div>
+                  <div className="flex justify-between items-start mb-6">
+                    <span className="text-[10px] font-bold text-[#52525b] uppercase tracking-[0.2em]">Market Concept</span>
+                    <div className="h-2 w-2 rounded-full bg-blue-500/40 shadow-[0_0_8px_rgba(59,130,246,0.3)]" />
+                  </div>
+                  <h4 className="text-[15px] font-bold text-white mb-8 leading-relaxed line-clamp-2">
+                    {market.question}
+                  </h4>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.05] group-hover:border-emerald-500/20 transition-all">
+                    <div className="text-[9px] font-bold text-[#52525b] uppercase tracking-widest mb-1.5">Affirmative</div>
+                    <div className="text-xl font-bold text-emerald-400">
+                      {(market.outcomes.find((o) => o.name === "Yes")?.price || 0).toFixed(2)}¢
+                    </div>
+                  </div>
+                  <div className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.05] group-hover:border-rose-500/20 transition-all">
+                    <div className="text-[9px] font-bold text-[#52525b] uppercase tracking-widest mb-1.5">Negative</div>
+                    <div className="text-xl font-bold text-rose-400">
+                      {(market.outcomes.find((o) => o.name === "No")?.price || 0).toFixed(2)}¢
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))
+          ) : (
+            prices.map((price) => (
+              <div
+                key={price.symbol}
+                className="glass-card p-8 group flex flex-col justify-between min-h-[180px]"
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xl font-bold text-white tracking-tight">{price.symbol}</span>
+                  <div className={cn(
+                    "px-2 py-0.5 rounded-md text-[10px] font-bold",
+                    price.change24h >= 0 ? "text-emerald-400 bg-emerald-500/10" : "text-rose-400 bg-rose-500/10"
+                  )}>
+                    {price.change24h >= 0 ? "↑" : "↓"} {Math.abs(price.change24h).toFixed(2)}%
+                  </div>
+                </div>
+                <div className="text-3xl font-bold text-white tracking-tight mb-6">
+                  ${price.price.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                </div>
+                <div className="h-1 bg-white/[0.05] rounded-full overflow-hidden">
+                  <motion.div
+                    className="h-full bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.5)]"
+                    initial={{ width: 0 }}
+                    animate={{ width: String(40 + Math.random() * 40) + "%" }}
+                    transition={{ duration: 1.5, ease: "easeOut" }}
+                  />
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </section>
+
+      {/* Portfolio Metrics */}
+      {balance && (
+        <section>
+          <div className="mb-8">
+            <h3 className="text-xl font-bold text-white tracking-tight">Performance Summary</h3>
+            <p className="text-sm text-[#a1a1aa] mt-0.5">Consolidated account health and yield analytics.</p>
+          </div>
+          <div className="glass-card p-12">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-12">
+              {[
+                { label: "Available Liquidity", value: `$${balance.available.toLocaleString()}` },
+                { label: "Capital Deployed", value: `$${balance.inPositions.toLocaleString()}` },
+                { label: "Net P/L", value: `${balance.pnl >= 0 ? "+" : ""}$${balance.pnl.toLocaleString()}`, highlight: balance.pnl >= 0 ? "positive" : "negative" },
+                { label: "Account Yield", value: `${balance.pnlPercent >= 0 ? "+" : ""}${balance.pnlPercent.toFixed(2)}%`, highlight: balance.pnlPercent >= 0 ? "positive" : "negative" }
+              ].map((stat, i) => (
+                <div key={i}>
+                  <span className="text-[10px] font-bold text-[#52525b] uppercase tracking-[0.22em] block mb-2">{stat.label}</span>
+                  <span className={cn(
+                    "text-2xl font-bold tracking-tight",
+                    stat.highlight === "positive" ? "text-emerald-400" : stat.highlight === "negative" ? "text-rose-400" : "text-white"
+                  )}>
+                    {stat.value}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* Positions Section */}
+      <section>
+        <div className="mb-8">
+          <h3 className="text-xl font-bold text-white tracking-tight">Live Engagements</h3>
+          <p className="text-sm text-[#a1a1aa] mt-0.5">Real-time status of your active market exposures.</p>
+        </div>
+
+        <div className="glass-card overflow-hidden">
+          {loading ? (
+            <div className="py-32 text-center">
+              <RefreshCw className="w-8 h-8 animate-spin text-blue-500 mx-auto mb-4" />
+              <p className="text-[13px] font-medium text-[#52525b]">Synchronizing engine data...</p>
+            </div>
+          ) : positions.length === 0 ? (
+            <div className="py-32 text-center flex flex-col items-center">
+              <div className="w-16 h-16 rounded-2xl bg-white/[0.02] border border-white/[0.08] flex items-center justify-center mb-6">
+                <Activity className="w-8 h-8 text-[#52525b]" />
+              </div>
+              <p className="text-[15px] font-bold text-white mb-1">Null Exposure</p>
+              <p className="text-[13px] font-medium text-[#52525b]">No active positions detected in the current sector.</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="text-[10px] font-bold text-[#52525b] uppercase tracking-[0.2em] border-b border-white/[0.06]">
+                    <th className="text-left p-10">Instrument</th>
+                    <th className="text-left p-10">Vector</th>
+                    <th className="text-right p-10">Magnitude</th>
+                    <th className="text-right p-10">Basis</th>
+                    <th className="text-right p-10">Mark</th>
+                    <th className="text-right p-10">Unrealized P/L</th>
+                    <th className="text-right p-10">Tactics</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/[0.04]">
+                  {positions.map((position) => (
+                    <tr key={position.id} className="group hover:bg-white/[0.01] transition-colors">
+                      <td className="p-10">
+                        <div className="flex flex-col">
+                          <span className="text-[14px] font-bold text-white tracking-tight leading-none mb-2">
+                            {platform === "polymarket" ? position.marketQuestion : position.symbol}
+                          </span>
+                          <span className="text-[11px] font-medium text-[#52525b] uppercase tracking-wider">
+                            {position.source || "Manual Order"}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="p-10">
+                        <div className={cn(
+                          "inline-flex px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider",
+                          (position.side === "long" || position.outcome === "yes")
+                            ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                            : "bg-rose-500/10 text-rose-400 border border-rose-500/20"
+                        )}>
+                          {platform === "polymarket" ? position.outcome : position.side}
+                        </div>
+                      </td>
+                      <td className="p-10 text-right text-white font-bold text-[14px]">
+                        {platform === "polymarket" ? position.shares : `$${position.size.toLocaleString()}`}
+                      </td>
+                      <td className="p-10 text-right text-[#a1a1aa] font-medium text-[13px]">
+                        ${position.entryPrice.toLocaleString()}
+                      </td>
+                      <td className="p-10 text-right text-white font-bold text-[14px]">
+                        ${position.currentPrice.toLocaleString()}
+                      </td>
+                      <td className="p-10 text-right">
+                        <div className="flex flex-col items-end">
+                          <span className={cn("text-[14px] font-bold", position.pnl >= 0 ? "text-emerald-400" : "text-rose-400")}>
+                            {position.pnl >= 0 ? "+" : ""}${position.pnl.toLocaleString()}
+                          </span>
+                          <span className="text-[10px] font-bold opacity-40 mt-1">({position.pnlPercent >= 0 ? "+" : ""}{position.pnlPercent.toFixed(2)}%)</span>
+                        </div>
+                      </td>
+                      <td className="p-10 text-right">
+                        <button
+                          onClick={() => onClosePosition(position)}
+                          className="px-6 py-2 rounded-xl bg-white text-black font-extrabold text-[11px] uppercase tracking-wider opacity-0 group-hover:opacity-100 transform translate-y-2 group-hover:translate-y-0 transition-all duration-300"
+                        >
+                          Terminate
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </section>
+    </motion.div>
+  );
+}
+
+function AIAgentsTab({
+  platform,
+  agents,
+  agentTrades,
+  nlStrategies,
+  strategyTrades,
+  polymarkets,
+  prices,
+  onCreateAgent,
+  onToggleAgent,
+  onDeleteAgent,
+  onCreateStrategy,
+  onToggleStrategy,
+  onDeleteStrategy,
+}: {
+  platform: Platform;
+  agents: SidexAgent[];
+  agentTrades: AgentTrade[];
+  nlStrategies: NLStrategy[];
+  strategyTrades: StrategyTrade[];
+  polymarkets: PolymarketMarket[];
+  prices: PriceData[];
+  onCreateAgent: () => void;
+  onToggleAgent: (agent: SidexAgent) => void;
+  onDeleteAgent: (agentId: string) => void;
+  onCreateStrategy: () => void;
+  onToggleStrategy: (strategy: NLStrategy) => void;
+  onDeleteStrategy: (strategyId: string) => void;
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 15 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -15 }}
+      transition={{ duration: 0.6, ease: [0.2, 0, 0, 1] }}
+      className="space-y-16"
+    >
+      {/* Strategy Section */}
+      <section>
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-8 mb-10">
+          <div>
+            <h3 className="text-xl font-bold text-white tracking-tight">Autonomous Strategies</h3>
+            <p className="text-sm text-[#a1a1aa] mt-1">Deploy neural units with natural language directive sets.</p>
+          </div>
+          <CyberButton onClick={onCreateStrategy} size="sm">
+            <Plus className="w-4 h-4 mr-2" />
+            New Deployment
+          </CyberButton>
+        </div>
+
+        {nlStrategies.length === 0 ? (
+          <div className="glass-card p-32 text-center flex flex-col items-center">
+            <div className="w-20 h-20 rounded-3xl bg-white/[0.02] border border-white/[0.08] flex items-center justify-center mb-6">
+              <Sparkles className="w-10 h-10 text-[#52525b]" />
+            </div>
+            <p className="text-[17px] font-bold text-white mb-2">Null Deployments</p>
+            <p className="text-[14px] font-medium text-[#52525b] mb-10 max-w-sm">No active neural strategies detected in your deployment matrix.</p>
+            <CyberButton variant="secondary" onClick={onCreateStrategy} size="sm">
+              Configure Strategy
+            </CyberButton>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            {nlStrategies.map((strategy) => {
+              const marketName = strategy.marketId
+                ? polymarkets.find((m) => m.id === strategy.marketId)?.question || "Market Reference"
+                : strategy.symbol;
+              return (
+                <div key={strategy.id} className="glass-card p-10 group relative overflow-hidden">
+                  <div className="flex items-center justify-between mb-10">
+                    <div className="flex items-center gap-4">
+                      <div className={cn(
+                        "w-2 h-2 rounded-full",
+                        strategy.status === "running" ? "bg-emerald-500 shadow-[0_0_12px_var(--color-positive)]" : "bg-[#52525b]"
+                      )} />
+                      <span className="text-lg font-bold text-white tracking-tight">{strategy.name}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-bold text-[#52525b] uppercase tracking-widest bg-white/[0.03] border border-white/[0.06] px-3 py-1 rounded-md">
+                        {strategy.status}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-8 mb-12">
+                    <div>
+                      <span className="text-[10px] font-bold text-[#52525b] uppercase tracking-[0.2em] block mb-3">Operational Target</span>
+                      <div className="text-[15px] font-bold text-white line-clamp-1">{marketName}</div>
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-bold text-[#52525b] uppercase tracking-[0.2em] block mb-3">Model Directives</span>
+                      <div className="text-[14px] text-[#a1a1aa] font-medium leading-relaxed bg-white/[0.02] p-6 rounded-2xl border border-white/[0.06] italic">
+                        "{strategy.description}"
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-8 mb-12">
+                    <div>
+                      <span className="text-[10px] font-bold text-[#52525b] uppercase tracking-[0.2em] block mb-2">Allocated</span>
+                      <span className="text-lg font-bold text-white">${strategy.capital.toLocaleString()}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-bold text-[#52525b] uppercase tracking-[0.2em] block mb-2">Executions</span>
+                      <span className="text-lg font-bold text-white">{strategy.stats.totalTrades}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-bold text-[#52525b] uppercase tracking-[0.2em] block mb-2">Gain/Loss</span>
+                      <span className={cn(
+                        "text-lg font-bold",
+                        strategy.stats.totalPnl >= 0 ? "text-emerald-400" : "text-rose-400"
+                      )}>
+                        {strategy.stats.totalPnl >= 0 ? "+" : ""}${strategy.stats.totalPnl.toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-4">
+                    <button
+                      onClick={() => onToggleStrategy(strategy)}
+                      className={cn(
+                        "flex-1 py-3 font-bold text-[12px] uppercase tracking-wider rounded-xl transition-all",
+                        strategy.status === "running"
+                          ? "bg-white text-black hover:bg-white/90"
+                          : "bg-white/[0.05] text-white hover:bg-white/[0.1] border border-white/[0.08]"
+                      )}
+                    >
+                      {strategy.status === "running" ? "Suspend Unit" : "Activate Unit"}
+                    </button>
+                    <button
+                      onClick={() => onDeleteStrategy(strategy.id)}
+                      className="p-3 bg-white/[0.03] border border-white/[0.08] text-[#52525b] hover:text-rose-400 hover:bg-rose-500/10 rounded-xl transition-all"
+                    >
+                      <Trash2 className="w-5 h-5" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      {/* Strategy History */}
+      {strategyTrades.length > 0 && (
+        <section>
+          <div className="mb-8">
+            <h3 className="text-xl font-bold text-white tracking-tight">Execution Stream</h3>
+            <p className="text-sm text-[#a1a1aa] mt-0.5">Historical log of autonomous neural operations.</p>
+          </div>
+
+          <div className="glass-card overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="text-[10px] font-bold text-[#52525b] uppercase tracking-[0.2em] border-b border-white/[0.06]">
+                    <th className="text-left p-10">Timestamp</th>
+                    <th className="text-left p-10">Unit ID</th>
+                    <th className="text-left p-10">Action</th>
+                    <th className="text-right p-10">Magnitude</th>
+                    <th className="text-right p-10">Marked P/L</th>
+                    <th className="text-left p-10">Neural Trigger</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/[0.04]">
+                  {strategyTrades.slice(-10).reverse().map((trade) => {
+                    const strategy = nlStrategies.find((s) => s.id === trade.strategyId);
+                    return (
+                      <tr key={trade.id} className="group hover:bg-white/[0.01] transition-colors">
+                        <td className="p-10 text-[#52525b] text-[13px] font-medium">{new Date(trade.timestamp).toLocaleTimeString()}</td>
+                        <td className="p-10 text-white font-bold text-[14px]">{strategy?.name || "System Unit"}</td>
+                        <td className="p-10">
+                          <span className={cn(
+                            "px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider",
+                            trade.action === "buy" ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" : "bg-rose-500/10 text-rose-400 border border-rose-500/20"
+                          )}>
+                            {trade.action}
+                          </span>
+                        </td>
+                        <td className="p-10 text-right text-white font-bold text-[14px]">${trade.amount.toLocaleString()}</td>
+                        <td className={cn(
+                          "p-10 text-right font-bold text-[14px]",
+                          trade.pnl !== undefined ? trade.pnl >= 0 ? "text-emerald-400" : "text-rose-400" : "text-[#52525b]"
+                        )}>
+                          {trade.pnl !== undefined ? `${trade.pnl >= 0 ? "+" : ""}${trade.pnl.toFixed(2)}` : "—"}
+                        </td>
+                        <td className="p-10 text-[#a1a1aa] text-[12px] font-medium italic opacity-60">
+                          {trade.rule.condition.type} threshold @ {trade.rule.condition.value}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      )}
+    </motion.div>
+  );
+}
+
+function CopyTradingTab({
+  platform,
+  copyConfigs,
+  copyTrades,
+  onCreateConfig,
+  onToggleConfig,
+  onDeleteConfig,
+}: {
+  platform: Platform;
+  copyConfigs: CopyConfig[];
+  copyTrades: CopyTrade[];
+  onCreateConfig: () => void;
+  onToggleConfig: (configId: string, enabled: boolean) => void;
+  onDeleteConfig: (configId: string) => void;
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 15 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -15 }}
+      transition={{ duration: 0.6, ease: [0.2, 0, 0, 1] }}
+      className="space-y-16"
+    >
+      <section>
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-8 mb-10">
+          <div>
+            <h3 className="text-xl font-bold text-white tracking-tight">Portfolio Synchronization</h3>
+            <p className="text-sm text-[#a1a1aa] mt-1">Mirror high-performance wallets via shadow execution protocols.</p>
+          </div>
+          <CyberButton onClick={onCreateConfig} size="sm">
+            <Plus className="w-4 h-4 mr-2" />
+            Establish Sync
+          </CyberButton>
+        </div>
+
+        {copyConfigs.length === 0 ? (
+          <div className="glass-card p-32 text-center flex flex-col items-center">
+            <div className="w-20 h-20 rounded-3xl bg-white/[0.02] border border-white/[0.08] flex items-center justify-center mb-6">
+              <Users className="w-10 h-10 text-[#52525b]" />
+            </div>
+            <p className="text-[17px] font-bold text-white mb-2">No Active Syncs</p>
+            <p className="text-[14px] font-medium text-[#52525b] mb-10 max-w-sm">Synchronize your portfolio with professional vessels to automate execution.</p>
+            <CyberButton variant="secondary" onClick={onCreateConfig} size="sm">
+              Initialize Sync Link
+            </CyberButton>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            {copyConfigs.map((config) => (
+              <div key={config.id} className="glass-card p-10 group relative overflow-hidden">
+                <div className="flex items-center justify-between mb-10">
+                  <div className="flex items-center gap-4">
+                    <div className={cn(
+                      "w-2 h-2 rounded-full",
+                      config.enabled ? "bg-emerald-500 shadow-[0_0_12px_var(--color-positive)]" : "bg-[#52525b]"
+                    )} />
+                    <span className="text-lg font-bold text-white tracking-tight">{config.targetLabel || "Shadow Vessel"}</span>
+                  </div>
+                  <button
+                    onClick={() => onToggleConfig(config.id, config.enabled)}
+                    className="transition-all duration-300 hover:scale-110 active:scale-95"
+                  >
+                    {config.enabled ? (
+                      <ToggleRight className="w-8 h-8 text-blue-500" />
+                    ) : (
+                      <ToggleLeft className="w-8 h-8 text-[#52525b]" />
+                    )}
+                  </button>
+                </div>
+
+                <div className="space-y-8 mb-12">
+                  <div>
+                    <span className="text-[10px] font-bold text-[#52525b] uppercase tracking-[0.2em] block mb-3">Vessel Identifier</span>
+                    <div className="text-[13px] font-mono text-[#a1a1aa] truncate bg-white/[0.02] p-4 rounded-xl border border-white/[0.06]">
+                      {config.targetWallet}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-8 mb-12">
+                  <div>
+                    <span className="text-[10px] font-bold text-[#52525b] uppercase tracking-[0.2em] block mb-2">Algorithm</span>
+                    <span className="text-[13px] font-bold text-white uppercase tracking-wider">{config.sizingMode}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold text-[#52525b] uppercase tracking-[0.2em] block mb-2">Mirrored</span>
+                    <span className="text-[15px] font-bold text-white">{config.stats.totalCopied}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold text-[#52525b] uppercase tracking-[0.2em] block mb-2">Net P/L</span>
+                    <span className={cn(
+                      "text-[15px] font-bold",
+                      config.stats.totalPnl >= 0 ? "text-emerald-400" : "text-rose-400"
+                    )}>
+                      {config.stats.totalPnl >= 0 ? "+" : ""}${config.stats.totalPnl.toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex gap-4">
+                  <div className="flex-1 flex items-center px-5 bg-white/[0.03] border border-white/[0.06] rounded-xl text-[11px] font-bold text-[#a1a1aa] uppercase tracking-wider">
+                    {config.sizingMode === "fixed"
+                      ? `ALLOCATION: $${config.fixedSize}`
+                      : `EXPOSURE: ${config.portfolioPercentage}% SCALE`}
+                  </div>
+                  <button
+                    onClick={() => onDeleteConfig(config.id)}
+                    className="p-3 bg-white/[0.03] border border-white/[0.08] text-[#52525b] hover:text-rose-400 hover:bg-rose-500/10 rounded-xl transition-all"
+                  >
+                    <Trash2 className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* Sync Monitor */}
+      {copyTrades.length > 0 && (
+        <section>
+          <div className="mb-8">
+            <h3 className="text-xl font-bold text-white tracking-tight">Sync Stream Monitor</h3>
+            <p className="text-sm text-[#a1a1aa] mt-0.5">Real-time surveillance of mirrored market operations.</p>
+          </div>
+
+          <div className="glass-card overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="text-[10px] font-bold text-[#52525b] uppercase tracking-[0.2em] border-b border-white/[0.06]">
+                    <th className="text-left p-10">Sync Time</th>
+                    <th className="text-left p-10">Vessel</th>
+                    <th className="text-left p-10">Instrument</th>
+                    <th className="text-left p-10">Vector</th>
+                    <th className="text-right p-10">Source Mag</th>
+                    <th className="text-right p-10">Mirror Mag</th>
+                    <th className="text-right p-10">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/[0.04]">
+                  {copyTrades.slice(-20).reverse().map((trade) => {
+                    const config = copyConfigs.find((c) => c.id === trade.configId);
+                    return (
+                      <tr key={trade.id} className="group hover:bg-white/[0.01] transition-colors">
+                        <td className="p-10 text-[#52525b] text-[13px] font-medium">{new Date(trade.timestamp).toLocaleTimeString()}</td>
+                        <td className="p-10 text-white font-bold text-[14px]">{config?.targetLabel || "Shadow Signal"}</td>
+                        <td className="p-10 text-white font-medium text-[14px] uppercase tracking-tight">{trade.symbol}</td>
+                        <td className="p-10">
+                          <span className={cn(
+                            "px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider",
+                            trade.side === "buy" ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" : "bg-rose-500/10 text-rose-400 border border-rose-500/20"
+                          )}>
+                            {trade.side}
+                          </span>
+                        </td>
+                        <td className="p-10 text-right text-[#a1a1aa] text-[13px] font-medium">${trade.originalSize.toLocaleString()}</td>
+                        <td className="p-10 text-right text-white font-bold text-[14px]">${trade.copiedSize.toFixed(2)}</td>
+                        <td className="p-10 text-right">
+                          <span className={cn(
+                            "inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-widest",
+                            trade.status === "executed" ? "text-emerald-400" : "text-[#52525b]"
+                          )}>
+                            {trade.status === "executed" && <div className="w-1 h-1 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.5)]" />}
+                            {trade.status}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      )}
+    </motion.div>
+  );
+}

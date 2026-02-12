@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Users, Store, Zap, Sparkles, Target, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import dynamic from "next/dynamic";
-import { useWallet } from "@solana/wallet-adapter-react";
+import { useWallet } from "@/hooks/useWalletCompat";
 import { useCustomWalletModal } from "@/components/providers/CustomWalletModalProvider";
 
 const AgentsTab = dynamic(() => import("./tabs/AgentsTab"), { ssr: false });

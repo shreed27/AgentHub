@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import api from "@/lib/api";
-import { useWallet } from "@solana/wallet-adapter-react";
+import { useWallet } from "@/hooks/useWalletCompat";
 import { useCustomWalletModal } from "@/components/providers/CustomWalletModalProvider";
 
 interface SwarmConfig {
@@ -62,7 +62,7 @@ export default function SwarmPage() {
     const { setVisible } = useCustomWalletModal();
     const [swarms, setSwarms] = useState<SwarmConfig[]>([]);
     const [selectedSwarm, setSelectedSwarm] = useState<SwarmConfig | null>(null);
-    const [walletsListList, setWalletsList] = useState<SwarmWallet[]>([]);
+    const [walletsList, setWalletsList] = useState<SwarmWallet[]>([]);
     const [executions, setExecutions] = useState<SwarmExecution[]>([]);
     const [stats, setStats] = useState<SwarmStats | null>(null);
     const [loading, setLoading] = useState(true);
@@ -96,13 +96,18 @@ export default function SwarmPage() {
                 api.getSwarmStats(wallet),
             ]);
 
-            if (swarmsRes.success) {
-                setSwarms(swarmsRes.data || []);
-                if (swarmsRes.data?.length > 0 && !selectedSwarm) {
-                    selectSwarm(swarmsRes.data[0]);
+            if (swarmsRes.success && swarmsRes.data) {
+                const rawData = swarmsRes.data as { data?: SwarmConfig[] } | SwarmConfig[];
+                const swarmData = Array.isArray(rawData) ? rawData : (rawData.data || []);
+                setSwarms(swarmData);
+                if (swarmData.length > 0 && !selectedSwarm) {
+                    selectSwarm(swarmData[0]);
                 }
             }
-            if (statsRes.success) setStats(statsRes.data);
+            if (statsRes.success && statsRes.data) {
+                const rawData = statsRes.data as { data?: SwarmStats } | SwarmStats;
+                setStats('data' in rawData && rawData.data ? rawData.data : rawData as SwarmStats);
+            }
         } catch (error) {
             console.error('Error loading swarm data:', error);
         } finally {
@@ -119,8 +124,14 @@ export default function SwarmPage() {
                 api.get(`/swarm/${swarm.id}/executions`, {}),
             ]);
 
-            if (walletsListRes.success) setWalletsList(walletsListRes.data || []);
-            if (execsRes.success) setExecutions(execsRes.data || []);
+            if (walletsListRes.success && walletsListRes.data) {
+                const rawData = walletsListRes.data as { data?: SwarmWallet[] } | SwarmWallet[];
+                setWalletsList(Array.isArray(rawData) ? rawData : (rawData.data || []));
+            }
+            if (execsRes.success && execsRes.data) {
+                const rawData = execsRes.data as { data?: SwarmExecution[] } | SwarmExecution[];
+                setExecutions(Array.isArray(rawData) ? rawData : (rawData.data || []));
+            }
         } catch (error) {
             console.error('Error loading swarm details:', error);
         }
@@ -133,10 +144,7 @@ export default function SwarmPage() {
                 userWallet: wallet,
                 name: newSwarm.name || `Swarm ${swarms.length + 1}`,
                 strategy: newSwarm.strategy,
-                maxWallets: newSwarm.maxWallets,
-                minWallets: Math.floor(newSwarm.maxWallets / 2),
-                maxPositionPerWallet: newSwarm.totalBudget / newSwarm.maxWallets,
-                totalBudget: newSwarm.totalBudget,
+                walletCount: newSwarm.maxWallets,
             });
 
             if (result.success) {
@@ -155,9 +163,8 @@ export default function SwarmPage() {
         try {
             await api.executeSwarmTrade(selectedSwarm.id, {
                 symbol: 'SOL/USDC',
-                action: 'buy',
+                side: 'buy',
                 totalAmount: 1000,
-                splitStrategy: 'equal',
             });
             selectSwarm(selectedSwarm);
         } catch (error) {
@@ -481,7 +488,7 @@ export default function SwarmPage() {
                             animate={{ scale: 1, opacity: 1 }}
                             exit={{ scale: 0.95, opacity: 0 }}
                             className="bg-background border border-white/10 rounded-xl p-6 w-full max-w-md"
-                            onClick={(e) => e.stopPropagation()}
+                            onClick={(e: React.MouseEvent) => e.stopPropagation()}
                         >
                             <div className="flex items-center justify-between mb-6">
                                 <h2 className="text-xl font-bold">Create Swarm</h2>

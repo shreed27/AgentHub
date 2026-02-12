@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import api from "@/lib/api";
-import { useWallet } from "@solana/wallet-adapter-react";
+import { useWallet } from "@/hooks/useWalletCompat";
 import { useCustomWalletModal } from "@/components/providers/CustomWalletModalProvider";
 
 interface RiskMetrics {
@@ -71,10 +71,12 @@ export default function RiskPage() {
         if (!wallet) return;
         try {
             const dashboardRes = await api.getRiskDashboard(wallet);
-            if (dashboardRes.success) {
-                const data = dashboardRes.data;
-                setMetrics(data.metrics);
-                setCircuitBreaker(data.circuitBreaker);
+            if (dashboardRes.success && dashboardRes.data) {
+                const rawData = dashboardRes.data as unknown;
+                const nested = rawData as { data?: { metrics: RiskMetrics; circuitBreaker: CircuitBreakerConfig; stressTests: StressTestResult[] } };
+                const data = nested.data || rawData as { metrics: RiskMetrics; circuitBreaker: CircuitBreakerConfig; stressTests: StressTestResult[] };
+                if (data.metrics) setMetrics(data.metrics);
+                if (data.circuitBreaker) setCircuitBreaker(data.circuitBreaker);
                 setStressTests(data.stressTests || []);
             }
         } catch (error) {
@@ -245,7 +247,7 @@ export default function RiskPage() {
                         Max Drawdown
                     </div>
                     <div className="text-2xl font-bold font-mono text-red-400">
-                        -{(metrics?.maxDrawdownPercent || 0).toFixed(2)}%
+                        -{(metrics?.maxDrawdown || 0).toFixed(2)}%
                     </div>
                     <div className="text-xs text-muted-foreground mt-1">
                         Current: -{(metrics?.currentDrawdown || 0).toFixed(2)}%

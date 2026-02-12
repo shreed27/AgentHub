@@ -35,7 +35,17 @@ export default function LimitOrdersTab({ walletAddress }: LimitOrdersTabProps) {
             try {
                 const response = await api.getLimitOrderStats(walletAddress);
                 if (response.success && response.data) {
-                    setStats(response.data as OrderStats);
+                    const rawData = response.data as unknown;
+                    const nested = rawData as { data?: Record<string, unknown> };
+                    const statsObj = nested.data || rawData as Record<string, unknown>;
+                    setStats({
+                        total: (statsObj.total ?? statsObj.active ?? 0) as number,
+                        pending: (statsObj.pending ?? statsObj.active ?? 0) as number,
+                        executed: (statsObj.executed ?? 0) as number,
+                        cancelled: (statsObj.cancelled ?? 0) as number,
+                        totalVolume: (statsObj.totalVolume ?? 0) as number,
+                        successRate: (statsObj.successRate ?? 0) as number,
+                    });
                 }
             } catch (error) {
                 console.error("Failed to fetch limit order stats:", error);

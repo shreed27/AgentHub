@@ -439,11 +439,37 @@ export function LimitOrders({ walletAddress, className, compact = false }: Limit
       ]);
 
       if (ordersRes.success && ordersRes.data) {
-        setOrders(ordersRes.data as LimitOrder[]);
+        const rawData = ordersRes.data as unknown;
+        const nested = rawData as { data?: Array<Record<string, unknown>> };
+        const orderArray = Array.isArray(rawData) ? rawData : (nested.data || []);
+        // Map API response to LimitOrder interface
+        const mappedOrders: LimitOrder[] = orderArray.map((o: Record<string, unknown>) => ({
+          id: String(o.id || ''),
+          walletAddress: String(o.walletAddress || ''),
+          token: String(o.token || o.inputMint || ''),
+          tokenSymbol: String(o.tokenSymbol || ''),
+          side: (o.side || (o.direction === 'above' ? 'sell' : 'buy')) as 'buy' | 'sell',
+          amount: Number(o.amount || o.inputAmount || 0),
+          targetPrice: Number(o.targetPrice || 0),
+          currentPrice: Number(o.currentPrice || 0),
+          status: (o.status || 'pending') as LimitOrder['status'],
+          triggerCondition: (o.triggerCondition || o.direction || 'below') as 'above' | 'below',
+          expiresAt: o.expiresAt as number | undefined,
+          createdAt: Number(o.createdAt || Date.now()),
+        }));
+        setOrders(mappedOrders);
       }
 
       if (statsRes.success && statsRes.data) {
-        setStats(statsRes.data as LimitOrderStats);
+        const rawData = statsRes.data as unknown;
+        const nested = rawData as { data?: Record<string, number> };
+        const statsObj = nested.data || rawData as Record<string, number>;
+        setStats({
+          total: statsObj.total || statsObj.active || 0,
+          pending: statsObj.pending || statsObj.active || 0,
+          executed: statsObj.executed || 0,
+          cancelled: statsObj.cancelled || 0,
+        });
       }
     } catch (error) {
       console.error("Failed to fetch limit orders:", error);
@@ -466,10 +492,18 @@ export function LimitOrders({ walletAddress, className, compact = false }: Limit
   const handleCreateOrder = async (orderData: Partial<LimitOrder>) => {
     if (!walletAddress) return;
     try {
-      const response = await api.createLimitOrder({
+      // Map LimitOrder fields to API expected format
+      const apiData = {
         walletAddress,
-        ...orderData,
-      });
+        inputMint: orderData.token || '',
+        outputMint: 'So11111111111111111111111111111111111111112', // SOL as default output
+        inputAmount: orderData.amount || 0,
+        targetPrice: orderData.targetPrice || 0,
+        direction: orderData.triggerCondition || (orderData.side === 'buy' ? 'below' : 'above') as 'above' | 'below',
+        expiresAt: orderData.expiresAt,
+        slippageBps: 50,
+      };
+      const response = await api.createLimitOrder(apiData);
 
       if (response.success) {
         setShowCreateForm(false);

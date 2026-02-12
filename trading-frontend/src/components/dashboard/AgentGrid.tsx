@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { motion } from "framer-motion";
-import { Play, Pause, AlertCircle, RefreshCw, Cpu, Loader2 } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Activity, Clock, Cpu, Pause, Play, ChevronRight, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import api from "@/lib/api";
 
@@ -10,9 +10,10 @@ interface Agent {
     id: string;
     name: string;
     type: string;
-    status: "active" | "idle" | "error" | "paused";
+    status: 'active' | 'paused' | 'error';
     performance: number;
     lastAction: string;
+    uptime: string;
 }
 
 export function AgentGrid() {
@@ -22,16 +23,24 @@ export function AgentGrid() {
     useEffect(() => {
         async function fetchAgents() {
             try {
-                const response = await api.getAgents();
-                if (response.success && response.data) {
-                    setAgents(response.data.map((a: { id: string; name: string; type: string; status: string; performance?: { winRate?: number } }) => ({
-                        id: a.id,
-                        name: a.name,
-                        type: a.type,
-                        status: a.status as "active" | "idle" | "error" | "paused",
-                        performance: a.performance?.winRate || 0,
-                        lastAction: a.status === "active" ? "Monitoring markets" : "Paused",
-                    })));
+                const sidexResponse = await api.getSidexAgents();
+                if (sidexResponse.success && sidexResponse.data && sidexResponse.data.length > 0) {
+                    const mappedAgents: Agent[] = sidexResponse.data.map((agent: any) => {
+                        const uptimeMs = agent.startedAt ? Date.now() - agent.startedAt : 0;
+                        const hours = Math.floor(uptimeMs / 3600000);
+                        const minutes = Math.floor((uptimeMs % 3600000) / 60000);
+                        const agentStatus: 'active' | 'paused' | 'error' = agent.status === 'running' ? 'active' : agent.status === 'paused' ? 'paused' : 'error';
+                        return {
+                            id: agent.id,
+                            name: agent.name || 'Agent Unit',
+                            type: agent.strategy || 'Custom',
+                            status: agentStatus,
+                            performance: agent.stats?.pnlPercent || agent.stats?.winRate || 0,
+                            lastAction: agent.lastTrade ? `Order filled for ${agent.lastTrade.symbol}` : 'Scanning market',
+                            uptime: `${hours}h ${minutes}m`
+                        };
+                    });
+                    setAgents(mappedAgents);
                 }
             } catch (error) {
                 console.error('Failed to fetch agents:', error);
@@ -41,93 +50,89 @@ export function AgentGrid() {
         }
 
         fetchAgents();
-        const interval = setInterval(fetchAgents, 15000);
+        const interval = setInterval(fetchAgents, 30000);
         return () => clearInterval(interval);
     }, []);
+
     if (loading) {
         return (
             <div className="space-y-4">
-                <div className="flex items-center justify-center h-32">
-                    <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-                </div>
-            </div>
-        );
-    }
-
-    if (agents.length === 0) {
-        return (
-            <div className="space-y-4">
-                <div className="flex flex-col items-center justify-center h-32 text-muted-foreground">
-                    <Cpu className="w-8 h-8 mb-2 opacity-50" />
-                    <p className="text-sm">No agents deployed</p>
-                </div>
+                {[1, 2, 3].map((i) => (
+                    <div key={i} className="h-24 glass-card animate-pulse opacity-20" />
+                ))}
             </div>
         );
     }
 
     return (
-        <div className="space-y-4">
-            <div className="flex items-center justify-between px-1 mb-2">
-                <h2 className="text-xs font-bold text-muted-foreground uppercase tracking-widest flex items-center gap-2">
-                    <Cpu className="w-3.5 h-3.5" />
-                    Active Agents ({agents.length})
-                </h2>
-                <div className="flex items-center gap-2">
-                    <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-green-500/10 border border-green-500/20">
-                        <span className="relative flex h-1.5 w-1.5">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-500 opacity-75"></span>
-                            <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-green-500"></span>
-                        </span>
-                        <span className="text-[9px] font-bold text-green-600 dark:text-green-400 uppercase tracking-wider">Online</span>
-                    </div>
-                </div>
-            </div>
-
-            <div className="grid grid-cols-1 gap-2">
+        <div className="flex flex-col gap-4">
+            <AnimatePresence mode="popLayout">
                 {agents.map((agent, i) => (
                     <motion.div
                         key={agent.id}
-                        initial={{ opacity: 0, x: -10 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: i * 0.05 }}
-                        className="group relative flex items-center p-3 rounded-xl border border-border/50 bg-card/40 hover:bg-card hover:border-border/80 transition-all duration-300 shadow-sm hover:shadow-md"
+                        layout
+                        initial={{ opacity: 0, scale: 0.98, y: 10 }}
+                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.95 }}
+                        transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+                        className="p-5 rounded-2xl bg-white/[0.02] border border-white/[0.05] hover:bg-white/[0.04] hover:border-white/[0.1] transition-all group relative overflow-hidden"
                     >
-                        <div className="mr-3 relative z-10">
-                            <div className={cn(
-                                "w-9 h-9 rounded-lg flex items-center justify-center border transition-all duration-300 shadow-sm",
-                                agent.status === "active" ? "bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20" :
-                                    agent.status === "paused" ? "bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border-yellow-500/20" : "bg-red-500/10 text-red-600 dark:text-red-400"
-                            )}>
-                                <Cpu className="w-4 h-4" />
+                        <div className="flex items-center justify-between relative z-10">
+                            <div className="flex items-center gap-5">
+                                <div className="w-12 h-12 rounded-xl bg-white text-black flex items-center justify-center shadow-[0_0_20px_rgba(255,255,255,0.1)]">
+                                    <Cpu className="w-6 h-6" />
+                                </div>
+
+                                <div>
+                                    <h4 className="text-lg font-bold text-white tracking-tight">{agent.name}</h4>
+                                    <div className="flex items-center gap-3 mt-1">
+                                        <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-white/[0.05] border border-white/[0.05]">
+                                            <div className={cn(
+                                                "w-1.5 h-1.5 rounded-full",
+                                                agent.status === 'active' ? "bg-[#2dce89]" : "bg-[#ffb800]"
+                                            )} />
+                                            <span className="text-[11px] font-bold text-[#86868b] uppercase tracking-tight">{agent.status}</span>
+                                        </div>
+                                        <span className="text-[11px] font-medium text-[#424245]">•</span>
+                                        <span className="text-[11px] font-bold text-[#86868b]">{agent.type} Strategy</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="flex items-center gap-8">
+                                <div className="text-right flex flex-col items-end">
+                                    <div className={cn(
+                                        "text-xl font-bold tracking-tight",
+                                        agent.performance >= 0 ? "text-[#2dce89]" : "text-[#f53d2d]"
+                                    )}>
+                                        {agent.performance >= 0 ? "+" : ""}{agent.performance}%
+                                    </div>
+                                    <span className="text-[10px] font-bold text-[#86868b] uppercase tracking-tight">Net Performance</span>
+                                </div>
+                                <ChevronRight className="w-5 h-5 text-[#424245] group-hover:text-white transition-colors" />
                             </div>
                         </div>
 
-                        <div className="flex-1 min-w-0 relative z-10">
-                            <div className="flex items-center gap-2 mb-0.5">
-                                <h3 className="font-semibold text-sm truncate text-foreground">{agent.name}</h3>
-                                {agent.status === "active" && (
-                                    <span className="flex h-1.5 w-1.5 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]" />
-                                )}
+                        <div className="mt-5 pt-4 border-t border-white/[0.03] flex items-center justify-between relative z-10">
+                            <div className="flex items-center gap-2 text-[12px] font-medium text-[#86868b]">
+                                <Activity className="w-3.5 h-3.5 text-blue-500" />
+                                <span className="italic text-zinc-400 font-medium">{agent.lastAction}</span>
                             </div>
-                            <div className="flex items-center gap-2 text-[10px] text-muted-foreground font-medium">
-                                <span className="uppercase tracking-wider opacity-70">{agent.type}</span>
-                                <span className="w-0.5 h-0.5 rounded-full bg-muted-foreground/30" />
-                                <span className="truncate opacity-50 font-normal">{agent.lastAction}</span>
-                            </div>
-                        </div>
-
-                        <div className="text-right pl-4 relative z-10 min-w-[70px]">
-                            <div className="text-[9px] font-semibold text-muted-foreground/50 uppercase tracking-wider mb-0.5">Yield</div>
-                            <div className={cn(
-                                "text-sm font-bold tracking-tight tabular-nums",
-                                agent.performance >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"
-                            )}>
-                                {agent.performance > 0 ? "+" : ""}{agent.performance}%
+                            <div className="flex items-center gap-2 text-[11px] font-bold text-[#424245]">
+                                <Clock className="w-3.5 h-3.5" />
+                                <span>UPTIME {agent.uptime}</span>
                             </div>
                         </div>
                     </motion.div>
                 ))}
-            </div>
+            </AnimatePresence>
+
+            <button className="w-full py-6 rounded-2xl border border-dashed border-white/5 bg-white/[0.01] hover:bg-white/[0.03] hover:border-white/10 transition-all group flex items-center justify-center gap-3">
+                <div className="w-8 h-8 rounded-full border border-white/10 flex items-center justify-center group-hover:bg-white group-hover:text-black transition-all">
+                    <Plus className="w-4 h-4" />
+                </div>
+                <span className="text-sm font-bold text-[#86868b] group-hover:text-white transition-colors">Deploy New Strategy Unit</span>
+            </button>
         </div>
     );
 }

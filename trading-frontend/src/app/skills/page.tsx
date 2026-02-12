@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import api from "@/lib/api";
-import { useWallet } from "@solana/wallet-adapter-react";
+import { useWallet } from "@/hooks/useWalletCompat";
 import { useCustomWalletModal } from "@/components/providers/CustomWalletModalProvider";
 
 interface Skill {
@@ -96,11 +96,31 @@ export default function SkillsPage() {
                 wallet ? api.get('/skills/stats/' + wallet, {}) : Promise.resolve({ success: true, data: null }),
             ]);
 
-            if (skillsRes.success) setSkills(skillsRes.data || []);
-            if (byCategoryRes.success) setSkillsByCategory(byCategoryRes.data || {});
-            if (execsRes.success) setExecutions(execsRes.data || []);
-            if (favsRes.success) setFavorites((favsRes.data || []).map((f: any) => f.skillId));
-            if (statsRes.success) setStats(statsRes.data);
+            if (skillsRes.success && skillsRes.data) {
+                const rawData = skillsRes.data as { data?: Skill[] } | Skill[];
+                setSkills(Array.isArray(rawData) ? rawData : (rawData.data || []));
+            }
+            if (byCategoryRes.success && byCategoryRes.data) {
+                const rawData = byCategoryRes.data as unknown;
+                const nested = rawData as { data?: Record<string, Skill[]> };
+                const categorized = nested.data || rawData as Record<string, Skill[]>;
+                if (categorized && typeof categorized === 'object' && !Array.isArray(categorized)) {
+                    setSkillsByCategory(categorized);
+                }
+            }
+            if (execsRes.success && execsRes.data) {
+                const rawData = execsRes.data as { data?: SkillExecution[] } | SkillExecution[];
+                setExecutions(Array.isArray(rawData) ? rawData : (rawData.data || []));
+            }
+            if (favsRes.success && favsRes.data) {
+                const rawData = favsRes.data as { data?: Array<{ skillId: string }> } | Array<{ skillId: string }>;
+                const favs = Array.isArray(rawData) ? rawData : (rawData.data || []);
+                setFavorites(favs.map((f: { skillId: string }) => f.skillId));
+            }
+            if (statsRes.success && statsRes.data) {
+                const rawData = statsRes.data as { data?: SkillStats } | SkillStats;
+                setStats('data' in rawData && rawData.data ? rawData.data : rawData as SkillStats);
+            }
         } catch (error) {
             console.error('Error loading skills data:', error);
         } finally {
@@ -403,7 +423,7 @@ export default function SkillsPage() {
                             animate={{ scale: 1, opacity: 1 }}
                             exit={{ scale: 0.95, opacity: 0 }}
                             className="bg-background border border-white/10 rounded-xl p-6 w-full max-w-lg"
-                            onClick={(e) => e.stopPropagation()}
+                            onClick={(e: React.MouseEvent) => e.stopPropagation()}
                         >
                             <div className="flex items-center justify-between mb-6">
                                 <div>

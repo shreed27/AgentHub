@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono, Orbitron, Exo_2 } from "next/font/google";
 import "./globals.css";
-import { DashboardShell } from "@/components/layout/DashboardShell";
-import { ThemeProvider, Providers } from "@/components/providers";
+import { ThemeProvider } from "@/components/providers";
 import { Toaster } from "react-hot-toast";
+import { ClientLayout } from "@/components/ClientLayout";
+import { BackgroundGrid } from "@/components/ui/BackgroundGrid";
+import DemoBanner from "@/components/DemoBanner";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -12,6 +14,16 @@ const geistSans = Geist({
 
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
+  subsets: ["latin"],
+});
+
+const orbitron = Orbitron({
+  variable: "--font-orbitron",
+  subsets: ["latin"],
+});
+
+const exo2 = Exo_2({
+  variable: "--font-exo2",
   subsets: ["latin"],
 });
 
@@ -28,7 +40,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground`}
+        className={`${geistSans.variable} ${geistMono.variable} ${orbitron.variable} ${exo2.variable} antialiased bg-background text-foreground`}
       >
         <ThemeProvider
           attribute="class"
@@ -36,11 +48,11 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <Providers>
-            <DashboardShell>
-              {children}
-            </DashboardShell>
-          </Providers>
+          <DemoBanner />
+          <BackgroundGrid />
+          <ClientLayout>
+            {children}
+          </ClientLayout>
           <Toaster
             position="top-right"
             toastOptions={{

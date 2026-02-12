@@ -203,11 +203,15 @@ export default function MigrationsPage() {
       ]);
 
       if (migrationsRes.success && migrationsRes.data) {
-        setMigrations(migrationsRes.data as Migration[]);
+        const rawData = migrationsRes.data as { data?: Migration[] } | Migration[];
+        const migrations = 'data' in rawData && rawData.data ? rawData.data : rawData as Migration[];
+        setMigrations(Array.isArray(migrations) ? migrations : []);
       }
 
       if (statsRes.success && statsRes.data) {
-        setStats(statsRes.data as MigrationStats);
+        const rawData = statsRes.data as { data?: MigrationStats } | MigrationStats;
+        const stats = 'data' in rawData && rawData.data ? rawData.data : rawData as MigrationStats;
+        setStats(stats);
       }
     } catch (error) {
       console.error("Failed to fetch migrations:", error);

@@ -255,17 +255,20 @@ export default function LeaderboardPage() {
         ]);
 
         if (leaderboardRes.success && leaderboardRes.data) {
+          const responseData = leaderboardRes.data as unknown;
+          const leaderboardData = ((responseData as { data?: { hunters: any[] } })?.data?.hunters) || ((responseData as { hunters?: any[] })?.hunters) || [];
           setHunters(
-            leaderboardRes.data.hunters.map((h: Record<string, unknown>, i: number) => ({
+            leaderboardData.map((h: Record<string, unknown>, i: number) => ({
               ...h,
-              rank: i + 1,
-              hunterRank: h.rank as string,
+              rank: h.position || i + 1,
+              hunterRank: h.rankTitle as string,
             })) as Hunter[]
           );
         }
 
         if (ranksRes.success && ranksRes.data) {
-          setRanks(ranksRes.data as RankInfo[]);
+          const ranksData = (ranksRes.data as { data?: RankInfo[] })?.data || ranksRes.data;
+          setRanks(Array.isArray(ranksData) ? ranksData as RankInfo[] : []);
         }
       } catch (error) {
         console.error("Failed to fetch leaderboard:", error);

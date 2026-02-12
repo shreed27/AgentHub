@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import api from "@/lib/api";
-import { useWallet } from "@solana/wallet-adapter-react";
+import { useWallet } from "@/hooks/useWalletCompat";
 import { useCustomWalletModal } from "@/components/providers/CustomWalletModalProvider";
 
 interface LedgerEntry {
@@ -320,15 +320,25 @@ export default function TradeLedgerPage() {
         ]);
 
         if (ledgerRes.success && ledgerRes.data) {
-          setEntries(ledgerRes.data.entries as LedgerEntry[]);
+          const rawData = ledgerRes.data as { data?: { entries: LedgerEntry[] }; entries?: LedgerEntry[] } | { entries: LedgerEntry[] };
+          const entries = 'data' in rawData && rawData.data?.entries
+            ? rawData.data.entries
+            : 'entries' in rawData && rawData.entries
+              ? rawData.entries
+              : [];
+          setEntries(entries);
         }
 
         if (statsRes.success && statsRes.data) {
-          setStats(statsRes.data as LedgerStats);
+          const rawData = statsRes.data as { data?: LedgerStats } | LedgerStats;
+          const stats = 'data' in rawData && rawData.data ? rawData.data : rawData as LedgerStats;
+          setStats(stats);
         }
 
         if (calibrationRes.success && calibrationRes.data) {
-          setCalibration(calibrationRes.data as CalibrationData);
+          const rawData = calibrationRes.data as { data?: CalibrationData } | CalibrationData;
+          const calibration = 'data' in rawData && rawData.data ? rawData.data : rawData as CalibrationData;
+          setCalibration(calibration);
         }
       } catch (error) {
         console.error("Failed to fetch trade ledger:", error);

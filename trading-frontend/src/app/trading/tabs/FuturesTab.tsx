@@ -243,7 +243,7 @@ export default function FuturesTab({ walletAddress }: FuturesTabProps) {
                             animate={{ scale: 1 }}
                             exit={{ scale: 0.95 }}
                             className="bg-background border border-white/10 rounded-xl p-6 w-full max-w-md"
-                            onClick={(e) => e.stopPropagation()}
+                            onClick={(e: React.MouseEvent) => e.stopPropagation()}
                         >
                             <div className="flex justify-between mb-6">
                                 <h2 className="text-xl font-bold">Open Position</h2>

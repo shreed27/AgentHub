@@ -1,20 +1,20 @@
 "use client";
 
-import { ThemeProvider as NextThemesProvider } from "next-themes";
+import { ThemeProvider as NextThemesProvider, type ThemeProviderProps as NextThemesProviderProps } from "next-themes";
 import * as React from "react";
-import { SolanaWalletProvider } from "@/components/providers/WalletProvider";
+
+type ThemeProviderProps = NextThemesProviderProps & {
+    children: React.ReactNode;
+};
 
 export function ThemeProvider({
     children,
     ...props
-}: React.ComponentProps<typeof NextThemesProvider>) {
-    return <NextThemesProvider {...props} forcedTheme="dark" attribute="class" defaultTheme="dark" enableSystem={false}>{children}</NextThemesProvider>;
+}: ThemeProviderProps) {
+    return <NextThemesProvider {...props}>{children}</NextThemesProvider>;
 }
 
+// Simple passthrough - wallet connection will be added via WalletProviderWrapper
 export function Providers({ children }: { children: React.ReactNode }) {
-    return (
-        <SolanaWalletProvider>
-            {children}
-        </SolanaWalletProvider>
-    );
+    return <>{children}</>;
 }

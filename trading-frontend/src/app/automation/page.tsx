@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import api from "@/lib/api";
-import { useWallet } from "@solana/wallet-adapter-react";
+import { useWallet } from "@/hooks/useWalletCompat";
 import { useCustomWalletModal } from "@/components/providers/CustomWalletModalProvider";
 
 interface AutomationRule {
@@ -77,7 +77,7 @@ function CreateRuleModal({
 }: {
   onClose: () => void;
   onCreated: () => void;
-  userWallet: string;
+  userWallet: string | null;
 }) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -115,8 +115,9 @@ function CreateRuleModal({
         actionConfig.message = alertMessage;
       }
 
+      if (!userWallet) return;
       await api.createAutomationRule({
-        userWallet,
+        userWallet: userWallet,
         name: name.trim(),
         description: description.trim() || undefined,
         ruleType,
@@ -144,7 +145,7 @@ function CreateRuleModal({
         initial={{ scale: 0.95, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.95, opacity: 0 }}
-        onClick={(e) => e.stopPropagation()}
+        onClick={(e: React.MouseEvent) => e.stopPropagation()}
         className="bg-zinc-900 border border-white/10 rounded-2xl max-w-lg w-full max-h-[90vh] overflow-auto"
       >
         <div className="p-6 border-b border-white/10 flex items-center justify-between">
@@ -442,15 +443,18 @@ export default function AutomationPage() {
       ]);
 
       if (rulesRes.success && rulesRes.data) {
-        setRules(rulesRes.data as AutomationRule[]);
+        const rulesData = (rulesRes.data as { data: AutomationRule[] })?.data || rulesRes.data;
+        setRules(Array.isArray(rulesData) ? rulesData : []);
       }
 
       if (statsRes.success && statsRes.data) {
-        setStats(statsRes.data as AutomationStats);
+        const statsData = (statsRes.data as { data: AutomationStats })?.data || statsRes.data;
+        setStats(statsData as AutomationStats);
       }
 
       if (historyRes.success && historyRes.data) {
-        setHistory(historyRes.data as AutomationHistory[]);
+        const historyData = (historyRes.data as { data: AutomationHistory[] })?.data || historyRes.data;
+        setHistory(Array.isArray(historyData) ? historyData : []);
       }
     } catch (error) {
       console.error("Failed to fetch automation data:", error);

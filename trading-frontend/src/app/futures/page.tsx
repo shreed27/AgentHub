@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import api from "@/lib/api";
-import { useWallet } from "@solana/wallet-adapter-react";
+import { useWallet } from "@/hooks/useWalletCompat";
 import { useCustomWalletModal } from "@/components/providers/CustomWalletModalProvider";
 
 interface FuturesPosition {
@@ -89,11 +89,11 @@ export default function FuturesPage() {
                 api.getFuturesStats(wallet),
             ]);
 
-            if (positionsRes.success) {
-                setPositions(positionsRes.data || []);
+            if (positionsRes.success && positionsRes.data) {
+                setPositions(positionsRes.data as FuturesPosition[]);
             }
-            if (statsRes.success) {
-                setStats(statsRes.data);
+            if (statsRes.success && statsRes.data) {
+                setStats(statsRes.data as FuturesStats);
             }
         } catch (error) {
             console.error('Error loading futures data:', error);
@@ -340,7 +340,7 @@ export default function FuturesPage() {
                             animate={{ scale: 1, opacity: 1 }}
                             exit={{ scale: 0.95, opacity: 0 }}
                             className="bg-background border border-white/10 rounded-xl p-6 w-full max-w-md"
-                            onClick={(e) => e.stopPropagation()}
+                            onClick={(e: React.MouseEvent) => e.stopPropagation()}
                         >
                             <div className="flex items-center justify-between mb-6">
                                 <h2 className="text-xl font-bold">Open Position</h2>

@@ -2,7 +2,8 @@
 
 import { useWhaleAlerts } from '@/lib/useWebSocket';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Wallet, TrendingUp, TrendingDown, Crown } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { Wallet, TrendingUp, TrendingDown, Activity } from 'lucide-react';
 
 function formatAmount(amount: number): string {
   if (amount >= 1000000) return `$${(amount / 1000000).toFixed(1)}M`;
@@ -23,100 +24,105 @@ export function WhaleAlerts() {
   const { whaleAlerts, isConnected } = useWhaleAlerts();
 
   return (
-    <div className="rounded-xl border border-white/10 bg-white/5 backdrop-blur-xl p-4">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-semibold text-white flex items-center gap-2">
-          <Crown className="h-5 w-5 text-yellow-400" />
-          Whale Alerts
-        </h3>
-        <div className="flex items-center gap-2">
-          <span
-            className={`h-2 w-2 rounded-full ${
-              isConnected ? 'bg-green-400 animate-pulse' : 'bg-red-400'
-            }`}
-          />
-          <span className="text-xs text-zinc-400">
-            {isConnected ? 'Live' : 'Offline'}
+    <div className="glass-card flex flex-col h-full overflow-hidden">
+      <div className="p-6 border-b border-white/[0.05] flex items-center justify-between bg-white/[0.01]">
+        <div>
+          <h3 className="text-[13px] font-semibold text-[#86868b] tracking-tight mb-1">LARGE TRANSACTIONS</h3>
+          <h4 className="text-xl font-bold text-white tracking-tight">Whale Intercept</h4>
+        </div>
+
+        <div className="flex items-center gap-2 px-3 py-1.5 bg-white/[0.03] border border-white/[0.05] rounded-full">
+          <span className="text-[11px] font-semibold text-white/70 tracking-tight flex items-center gap-2">
+            <Activity className="h-3 w-3 text-blue-500" />
+            Scanning
           </span>
         </div>
       </div>
 
-      <div className="space-y-2 max-h-[300px] overflow-y-auto">
-        <AnimatePresence mode="popLayout">
-          {whaleAlerts.length === 0 ? (
-            <div className="text-center py-6 text-zinc-500">
-              <Wallet className="h-8 w-8 mx-auto mb-2 opacity-50" />
-              <p className="text-sm">Monitoring whale activity...</p>
-            </div>
-          ) : (
-            whaleAlerts.map((alert) => (
+      <div className="flex-1 overflow-y-auto scrollbar-hide">
+        <div className="p-4 space-y-2">
+          <AnimatePresence mode="popLayout" initial={false}>
+            {whaleAlerts.length === 0 ? (
               <motion.div
-                key={alert.id}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: 20 }}
-                className={`p-3 rounded-lg border ${
-                  alert.action === 'buy'
-                    ? 'border-green-500/30 bg-green-500/10'
-                    : 'border-red-500/30 bg-red-500/10'
-                }`}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="text-center py-20 flex flex-col items-center"
               >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div
-                      className={`p-2 rounded-lg ${
-                        alert.action === 'buy' ? 'bg-green-500/20' : 'bg-red-500/20'
-                      }`}
-                    >
-                      {alert.action === 'buy' ? (
-                        <TrendingUp className="h-4 w-4 text-green-400" />
-                      ) : (
-                        <TrendingDown className="h-4 w-4 text-red-400" />
-                      )}
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold text-white">{alert.token}</span>
-                        <span
-                          className={`text-xs font-medium px-1.5 py-0.5 rounded ${
-                            alert.action === 'buy'
-                              ? 'bg-green-500/20 text-green-400'
-                              : 'bg-red-500/20 text-red-400'
-                          }`}
-                        >
-                          {alert.action.toUpperCase()}
-                        </span>
-                      </div>
-                      <p className="text-xs text-zinc-400">
-                        {alert.walletLabel || `${alert.walletAddress.slice(0, 8)}...`}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-semibold text-white">{formatAmount(alert.amount)}</p>
-                    <p className="text-xs text-zinc-500">{formatTimeAgo(alert.timestamp)} ago</p>
-                  </div>
-                </div>
-                <div className="mt-2 flex items-center justify-between">
-                  <div className="h-1 flex-1 bg-zinc-800 rounded-full overflow-hidden mr-2">
-                    <motion.div
-                      initial={{ width: 0 }}
-                      animate={{ width: `${alert.confidence}%` }}
-                      className={`h-full ${
-                        alert.confidence >= 80
-                          ? 'bg-green-500'
-                          : alert.confidence >= 60
-                          ? 'bg-yellow-500'
-                          : 'bg-orange-500'
-                      }`}
-                    />
-                  </div>
-                  <span className="text-xs text-zinc-400">{alert.confidence}% conf</span>
-                </div>
+                <Wallet className="h-8 w-8 text-white/10 mb-4" />
+                <p className="text-[13px] font-medium text-[#86868b]">No large moves detected.</p>
               </motion.div>
-            ))
-          )}
-        </AnimatePresence>
+            ) : (
+              whaleAlerts.map((alert) => (
+                <motion.div
+                  key={alert.id}
+                  layout
+                  initial={{ opacity: 0, scale: 0.98, x: -10 }}
+                  animate={{ opacity: 1, scale: 1, x: 0 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+                  className={cn(
+                    "p-4 rounded-xl border transition-all duration-300 relative group",
+                    alert.action === 'buy'
+                      ? "bg-[#2dce89]/[0.02] border-[#2dce89]/10 hover:bg-[#2dce89]/[0.05]"
+                      : "bg-[#f53d2d]/[0.02] border-[#f53d2d]/10 hover:bg-[#f53d2d]/[0.05]"
+                  )}
+                >
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-3">
+                      <div className={cn(
+                        "w-9 h-9 rounded-lg flex items-center justify-center border",
+                        alert.action === 'buy' ? 'text-[#2dce89] border-[#2dce89]/20 bg-[#2dce89]/5' : 'text-[#f53d2d] border-[#f53d2d]/20 bg-[#f53d2d]/10'
+                      )}>
+                        {alert.action === 'buy' ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-white text-[14px] tracking-tight">{alert.token}</span>
+                          <span className={cn(
+                            "text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-tight",
+                            alert.action === 'buy' ? 'text-[#2dce89] bg-[#2dce89]/10' : 'text-[#f53d2d] bg-[#f53d2d]/10'
+                          )}>
+                            {alert.action}
+                          </span>
+                        </div>
+                        <p className="text-[11px] font-medium text-[#86868b]">
+                          {alert.walletAddress.slice(0, 6)}...{alert.walletAddress.slice(-4)}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-lg font-bold text-white tracking-tight">{formatAmount(alert.amount)}</p>
+                      <p className="text-[11px] font-medium text-[#86868b]">{formatTimeAgo(alert.timestamp)} ago</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <div className="flex justify-between items-center text-[11px] font-medium text-[#86868b]">
+                      <span>Confidence Score</span>
+                      <span className="text-white">{alert.confidence}%</span>
+                    </div>
+                    <div className="h-1 w-full bg-white/[0.05] rounded-full overflow-hidden">
+                      <motion.div
+                        initial={{ width: 0 }}
+                        animate={{ width: `${alert.confidence}%` }}
+                        className={cn(
+                          "h-full rounded-full transition-all duration-1000",
+                          alert.confidence >= 80 ? 'bg-white' : 'bg-[#86868b]'
+                        )}
+                      />
+                    </div>
+                  </div>
+                </motion.div>
+              ))
+            )}
+          </AnimatePresence>
+        </div>
+      </div>
+
+      <div className="p-4 border-t border-white/[0.05] bg-black/[0.2] flex justify-end">
+        <span className="text-[10px] font-bold text-[#424245] uppercase tracking-widest">
+          Vortex Radar v2.0
+        </span>
       </div>
     </div>
   );
