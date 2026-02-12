@@ -54,6 +54,14 @@ import {
   subscriptionStatsHandler,
   discoverTradersHandler,
   recentActivityHandler,
+  platformSettingsHandler,
+  togglePlatformHandler,
+  toggleInstantModeHandler,
+  leverageSettingsHandler,
+  setLeverageHandler,
+  toggleMatchLeverageHandler,
+  thresholdSettingsHandler,
+  setThresholdHandler,
 } from './menus/copy-trading';
 import {
   startBuyHandler,
@@ -353,6 +361,23 @@ Type the amount in USD (e.g., "75" or "$150"):`,
             return discoverTradersHandler(ctx);
           case 'activity':
             return recentActivityHandler(ctx);
+          // Multi-platform settings
+          case 'platforms':
+            return platformSettingsHandler(ctx, params.slice(1));
+          case 'platform':
+            return togglePlatformHandler(ctx, params.slice(1));
+          case 'instant':
+            return toggleInstantModeHandler(ctx, params.slice(1));
+          case 'leverage':
+            return leverageSettingsHandler(ctx, params.slice(1));
+          case 'setlev':
+            return setLeverageHandler(ctx, params.slice(1));
+          case 'matchlev':
+            return toggleMatchLeverageHandler(ctx, params.slice(1));
+          case 'threshold':
+            return thresholdSettingsHandler(ctx, params.slice(1));
+          case 'setthresh':
+            return setThresholdHandler(ctx, params.slice(1));
           case 'exec':
             if (params[1] === 'add') {
               return executeAddSubscription(ctx, params.slice(2));

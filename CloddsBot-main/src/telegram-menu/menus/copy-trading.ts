@@ -507,6 +507,13 @@ export async function subscriptionStatsHandler(
 
   const statusEmoji = config.enabled ? '🟢' : '⏸️';
 
+  // Platform info
+  const platforms = config.platforms || { polymarket: { enabled: true, maxSize: 500 } };
+  const enabledPlatforms: string[] = [];
+  if (platforms.polymarket?.enabled) enabledPlatforms.push('📈 Poly');
+  if (platforms.hyperliquid?.enabled) enabledPlatforms.push('🔷 HL');
+  if (platforms.kalshi?.enabled) enabledPlatforms.push('🎲 Kalshi');
+
   let text = `📊 *Subscription Stats*
 
 ${statusEmoji} *${config.targetLabel || truncateAddress(config.targetWallet)}*
@@ -520,6 +527,9 @@ ${statusEmoji} *${config.targetLabel || truncateAddress(config.targetWallet)}*
 ├ Mode: ${config.sizingMode}
 ├ Size: $${config.fixedSize}
 ├ Max Position: $${config.maxPositionSize}
+├ Platforms: ${enabledPlatforms.join(' ') || 'None'}
+├ Instant Mode: ${config.instantMode ? '⚡ On' : '🐢 Off'}
+├ Max Slippage: ${config.maxSlippagePercent || 2}%
 ├ Dry Run: ${config.dryRun ? 'Yes' : 'No'}
 └ Created: ${formatRelativeTime(config.createdAt)}
 
@@ -545,6 +555,9 @@ ${statusEmoji} *${config.targetLabel || truncateAddress(config.targetWallet)}*
           ? btn('⏸️ Pause', `copy:toggle:${configId}`)
           : btn('▶️ Resume', `copy:toggle:${configId}`),
         btn('🗑️ Delete', `copy:del:${configId}`),
+      ],
+      [
+        btn('⚙️ Platform Settings', `copy:platforms:${configId}`),
       ],
       [
         btn('🔄 Refresh', `copy:stats:${configId}`),
@@ -631,8 +644,9 @@ No trades have been copied yet. Make sure you have active subscriptions.`;
         trade.status === 'closed' ? '🏁' :
         trade.status === 'failed' ? '❌' : '⏳';
       const pnlText = trade.pnl != null ? ` · P&L: ${formatUSD(trade.pnl)}` : '';
+      const platformEmoji = trade.platform === 'hyperliquid' ? '🔷' : trade.platform === 'kalshi' ? '🎲' : '📈';
 
-      text += `${statusEmoji} ${sideEmoji} ${truncateAddress(trade.targetWallet)}
+      text += `${statusEmoji} ${sideEmoji} ${platformEmoji} ${truncateAddress(trade.targetWallet)}
 ├ ${truncateAddress(trade.marketId)}
 └ $${trade.copiedSize.toFixed(2)} · ${formatRelativeTime(trade.createdAt)}${pnlText}
 
@@ -651,4 +665,532 @@ No trades have been copied yet. Make sure you have active subscriptions.`;
     ],
     parseMode: 'Markdown',
   };
+}
+
+/**
+ * Platform settings handler - Configure multi-platform copy trading
+ */
+export async function platformSettingsHandler(
+  ctx: MenuContext,
+  params: string[]
+): Promise<MenuResult> {
+  const configId = params[0];
+  ctx.state.currentMenu = 'copy_platforms';
+
+  if (!ctx.copyTrading) {
+    return {
+      text: `❌ Service unavailable`,
+      buttons: [[mainMenuBtn()]],
+      parseMode: 'Markdown',
+    };
+  }
+
+  const config = await ctx.copyTrading.getConfig(configId);
+  if (!config) {
+    return {
+      text: `❌ Subscription not found`,
+      buttons: [[btn('🤖 Copy Trading', 'menu:copy')], [mainMenuBtn()]],
+      parseMode: 'Markdown',
+    };
+  }
+
+  const platforms = config.platforms || {
+    polymarket: { enabled: true, maxSize: 500 },
+  };
+
+  const polyEnabled = platforms.polymarket?.enabled ?? true;
+  const hlEnabled = platforms.hyperliquid?.enabled ?? false;
+  const kalshiEnabled = platforms.kalshi?.enabled ?? false;
+
+  const text = `⚙️ *Platform Settings*
+
+*${config.targetLabel || truncateAddress(config.targetWallet)}*
+
+Configure which platforms to copy trades from:
+
+*Platforms:*
+${polyEnabled ? '✅' : '❌'} *Polymarket* - Prediction markets
+├ Max Size: $${platforms.polymarket?.maxSize || 500}
+
+${hlEnabled ? '✅' : '❌'} *Hyperliquid* - Perpetuals DEX
+├ Max Size: $${platforms.hyperliquid?.maxSize || 1000}
+├ Match Leverage: ${platforms.hyperliquid?.matchLeverage ? 'Yes' : 'No'}
+└ Max Leverage: ${platforms.hyperliquid?.maxLeverage || 5}x
+
+${kalshiEnabled ? '✅' : '❌'} *Kalshi* - Event markets
+├ Max Size: $${platforms.kalshi?.maxSize || 500}
+└ Momentum Threshold: ${platforms.kalshi?.momentumThreshold || 70}%
+
+*Execution Settings:*
+├ Instant Mode: ${config.instantMode ? '⚡ Enabled' : '🐢 Disabled'}
+└ Max Slippage: ${config.maxSlippagePercent || 2}%`;
+
+  return {
+    text,
+    buttons: [
+      [
+        btn(polyEnabled ? '❌ Disable Poly' : '✅ Enable Poly', `copy:platform:poly:${configId}`),
+        btn(hlEnabled ? '❌ Disable HL' : '✅ Enable HL', `copy:platform:hl:${configId}`),
+      ],
+      [
+        btn(kalshiEnabled ? '❌ Disable Kalshi' : '✅ Enable Kalshi', `copy:platform:kalshi:${configId}`),
+      ],
+      [
+        btn(config.instantMode ? '🐢 Disable Instant' : '⚡ Enable Instant', `copy:instant:${configId}`),
+      ],
+      [
+        btn('🔧 HL Leverage', `copy:leverage:${configId}`),
+        btn('🎯 Kalshi Threshold', `copy:threshold:${configId}`),
+      ],
+      [
+        backBtn(`copy:stats:${configId}`),
+        mainMenuBtn(),
+      ],
+    ],
+    parseMode: 'Markdown',
+  };
+}
+
+/**
+ * Toggle platform for a subscription
+ */
+export async function togglePlatformHandler(
+  ctx: MenuContext,
+  params: string[]
+): Promise<MenuResult> {
+  const [platform, configId] = params;
+
+  if (!ctx.copyTrading) {
+    return {
+      text: `❌ Service unavailable`,
+      buttons: [[mainMenuBtn()]],
+      parseMode: 'Markdown',
+    };
+  }
+
+  try {
+    const config = await ctx.copyTrading.getConfig(configId);
+    if (!config) {
+      throw new Error('Subscription not found');
+    }
+
+    const platforms = config.platforms || {
+      polymarket: { enabled: true, maxSize: 500 },
+    };
+
+    // Toggle the platform
+    switch (platform) {
+      case 'poly':
+        platforms.polymarket = {
+          ...platforms.polymarket,
+          enabled: !platforms.polymarket?.enabled,
+          maxSize: platforms.polymarket?.maxSize || 500,
+        };
+        break;
+      case 'hl':
+        platforms.hyperliquid = {
+          ...platforms.hyperliquid,
+          enabled: !platforms.hyperliquid?.enabled,
+          maxSize: platforms.hyperliquid?.maxSize || 1000,
+          matchLeverage: platforms.hyperliquid?.matchLeverage ?? true,
+          maxLeverage: platforms.hyperliquid?.maxLeverage || 5,
+        };
+        break;
+      case 'kalshi':
+        platforms.kalshi = {
+          ...platforms.kalshi,
+          enabled: !platforms.kalshi?.enabled,
+          maxSize: platforms.kalshi?.maxSize || 500,
+          momentumThreshold: platforms.kalshi?.momentumThreshold || 70,
+        };
+        break;
+    }
+
+    await ctx.copyTrading.updateConfig(configId, { platforms });
+
+    // Return to platform settings
+    return platformSettingsHandler(ctx, [configId]);
+  } catch (error) {
+    logger.error({ error, platform, configId }, 'Failed to toggle platform');
+    return {
+      text: `❌ *Failed to Toggle Platform*
+
+Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      buttons: [
+        [btn('🔄 Try Again', `copy:platforms:${configId}`)],
+        [mainMenuBtn()],
+      ],
+      parseMode: 'Markdown',
+    };
+  }
+}
+
+/**
+ * Toggle instant mode for a subscription
+ */
+export async function toggleInstantModeHandler(
+  ctx: MenuContext,
+  params: string[]
+): Promise<MenuResult> {
+  const configId = params[0];
+
+  if (!ctx.copyTrading) {
+    return {
+      text: `❌ Service unavailable`,
+      buttons: [[mainMenuBtn()]],
+      parseMode: 'Markdown',
+    };
+  }
+
+  try {
+    const config = await ctx.copyTrading.getConfig(configId);
+    if (!config) {
+      throw new Error('Subscription not found');
+    }
+
+    await ctx.copyTrading.updateConfig(configId, {
+      instantMode: !config.instantMode,
+    });
+
+    const newMode = !config.instantMode;
+
+    return {
+      text: `${newMode ? '⚡' : '🐢'} *Instant Mode ${newMode ? 'Enabled' : 'Disabled'}*
+
+${newMode
+        ? 'Trades will be copied immediately without delay.'
+        : 'Trades will use the configured copy delay.'}`,
+      buttons: [
+        [btn('⚙️ Platform Settings', `copy:platforms:${configId}`)],
+        [mainMenuBtn()],
+      ],
+      parseMode: 'Markdown',
+    };
+  } catch (error) {
+    logger.error({ error, configId }, 'Failed to toggle instant mode');
+    return {
+      text: `❌ *Failed to Toggle Instant Mode*
+
+Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      buttons: [
+        [btn('🔄 Try Again', `copy:platforms:${configId}`)],
+        [mainMenuBtn()],
+      ],
+      parseMode: 'Markdown',
+    };
+  }
+}
+
+/**
+ * Hyperliquid leverage settings handler
+ */
+export async function leverageSettingsHandler(
+  ctx: MenuContext,
+  params: string[]
+): Promise<MenuResult> {
+  const configId = params[0];
+  ctx.state.currentMenu = 'copy_leverage';
+  ctx.state.pendingConfigId = configId;
+
+  if (!ctx.copyTrading) {
+    return {
+      text: `❌ Service unavailable`,
+      buttons: [[mainMenuBtn()]],
+      parseMode: 'Markdown',
+    };
+  }
+
+  const config = await ctx.copyTrading.getConfig(configId);
+  if (!config) {
+    return {
+      text: `❌ Subscription not found`,
+      buttons: [[mainMenuBtn()]],
+      parseMode: 'Markdown',
+    };
+  }
+
+  const hlSettings = config.platforms?.hyperliquid || {
+    enabled: false,
+    maxSize: 1000,
+    matchLeverage: true,
+    maxLeverage: 5,
+  };
+
+  const text = `🔧 *Hyperliquid Leverage Settings*
+
+*Match Leverage:* ${hlSettings.matchLeverage ? 'Yes' : 'No'}
+When enabled, we'll use the same leverage as the whale (capped at your max).
+
+*Max Leverage:* ${hlSettings.maxLeverage}x
+Maximum leverage to use, even if the whale uses more.
+
+⚠️ Higher leverage = higher risk!
+
+Select your max leverage:`;
+
+  return {
+    text,
+    buttons: [
+      [
+        btn('1x', `copy:setlev:1:${configId}`),
+        btn('2x', `copy:setlev:2:${configId}`),
+        btn('3x', `copy:setlev:3:${configId}`),
+        btn('5x', `copy:setlev:5:${configId}`),
+      ],
+      [
+        btn('10x', `copy:setlev:10:${configId}`),
+        btn('20x', `copy:setlev:20:${configId}`),
+      ],
+      [
+        btn(hlSettings.matchLeverage ? '❌ Disable Match' : '✅ Enable Match', `copy:matchlev:${configId}`),
+      ],
+      [
+        backBtn(`copy:platforms:${configId}`),
+        mainMenuBtn(),
+      ],
+    ],
+    parseMode: 'Markdown',
+  };
+}
+
+/**
+ * Set leverage handler
+ */
+export async function setLeverageHandler(
+  ctx: MenuContext,
+  params: string[]
+): Promise<MenuResult> {
+  const [leverage, configId] = params;
+  const leverageNum = parseInt(leverage, 10);
+
+  if (!ctx.copyTrading) {
+    return {
+      text: `❌ Service unavailable`,
+      buttons: [[mainMenuBtn()]],
+      parseMode: 'Markdown',
+    };
+  }
+
+  try {
+    const config = await ctx.copyTrading.getConfig(configId);
+    if (!config) {
+      throw new Error('Subscription not found');
+    }
+
+    const platforms = config.platforms || {};
+    platforms.hyperliquid = {
+      ...platforms.hyperliquid,
+      enabled: platforms.hyperliquid?.enabled ?? false,
+      maxSize: platforms.hyperliquid?.maxSize || 1000,
+      matchLeverage: platforms.hyperliquid?.matchLeverage ?? true,
+      maxLeverage: leverageNum,
+    };
+
+    await ctx.copyTrading.updateConfig(configId, { platforms });
+
+    return {
+      text: `✅ *Max Leverage Set to ${leverageNum}x*
+
+Hyperliquid trades will now use maximum ${leverageNum}x leverage.`,
+      buttons: [
+        [btn('⚙️ Leverage Settings', `copy:leverage:${configId}`)],
+        [btn('🔙 Platform Settings', `copy:platforms:${configId}`)],
+        [mainMenuBtn()],
+      ],
+      parseMode: 'Markdown',
+    };
+  } catch (error) {
+    logger.error({ error, leverage, configId }, 'Failed to set leverage');
+    return {
+      text: `❌ *Failed to Set Leverage*
+
+Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      buttons: [
+        [btn('🔄 Try Again', `copy:leverage:${configId}`)],
+        [mainMenuBtn()],
+      ],
+      parseMode: 'Markdown',
+    };
+  }
+}
+
+/**
+ * Toggle leverage matching
+ */
+export async function toggleMatchLeverageHandler(
+  ctx: MenuContext,
+  params: string[]
+): Promise<MenuResult> {
+  const configId = params[0];
+
+  if (!ctx.copyTrading) {
+    return {
+      text: `❌ Service unavailable`,
+      buttons: [[mainMenuBtn()]],
+      parseMode: 'Markdown',
+    };
+  }
+
+  try {
+    const config = await ctx.copyTrading.getConfig(configId);
+    if (!config) {
+      throw new Error('Subscription not found');
+    }
+
+    const platforms = config.platforms || {};
+    const currentMatch = platforms.hyperliquid?.matchLeverage ?? true;
+
+    platforms.hyperliquid = {
+      ...platforms.hyperliquid,
+      enabled: platforms.hyperliquid?.enabled ?? false,
+      maxSize: platforms.hyperliquid?.maxSize || 1000,
+      matchLeverage: !currentMatch,
+      maxLeverage: platforms.hyperliquid?.maxLeverage || 5,
+    };
+
+    await ctx.copyTrading.updateConfig(configId, { platforms });
+
+    return leverageSettingsHandler(ctx, [configId]);
+  } catch (error) {
+    logger.error({ error, configId }, 'Failed to toggle match leverage');
+    return {
+      text: `❌ *Failed to Toggle*
+
+Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      buttons: [
+        [btn('🔄 Try Again', `copy:leverage:${configId}`)],
+        [mainMenuBtn()],
+      ],
+      parseMode: 'Markdown',
+    };
+  }
+}
+
+/**
+ * Kalshi momentum threshold settings handler
+ */
+export async function thresholdSettingsHandler(
+  ctx: MenuContext,
+  params: string[]
+): Promise<MenuResult> {
+  const configId = params[0];
+  ctx.state.currentMenu = 'copy_threshold';
+
+  if (!ctx.copyTrading) {
+    return {
+      text: `❌ Service unavailable`,
+      buttons: [[mainMenuBtn()]],
+      parseMode: 'Markdown',
+    };
+  }
+
+  const config = await ctx.copyTrading.getConfig(configId);
+  if (!config) {
+    return {
+      text: `❌ Subscription not found`,
+      buttons: [[mainMenuBtn()]],
+      parseMode: 'Markdown',
+    };
+  }
+
+  const kalshiSettings = config.platforms?.kalshi || {
+    enabled: false,
+    maxSize: 500,
+    momentumThreshold: 70,
+  };
+
+  const text = `🎯 *Kalshi Momentum Threshold*
+
+Current: *${kalshiSettings.momentumThreshold}%*
+
+Since Kalshi doesn't expose wallet addresses, we detect whale activity through market momentum patterns:
+
+• Price movement
+• Volume spikes
+• Orderbook imbalance
+• Large orders
+
+Higher threshold = fewer but more confident signals.
+
+Select threshold:`;
+
+  return {
+    text,
+    buttons: [
+      [
+        btn('50%', `copy:setthresh:50:${configId}`),
+        btn('60%', `copy:setthresh:60:${configId}`),
+        btn('70%', `copy:setthresh:70:${configId}`),
+      ],
+      [
+        btn('80%', `copy:setthresh:80:${configId}`),
+        btn('90%', `copy:setthresh:90:${configId}`),
+      ],
+      [
+        backBtn(`copy:platforms:${configId}`),
+        mainMenuBtn(),
+      ],
+    ],
+    parseMode: 'Markdown',
+  };
+}
+
+/**
+ * Set momentum threshold handler
+ */
+export async function setThresholdHandler(
+  ctx: MenuContext,
+  params: string[]
+): Promise<MenuResult> {
+  const [threshold, configId] = params;
+  const thresholdNum = parseInt(threshold, 10);
+
+  if (!ctx.copyTrading) {
+    return {
+      text: `❌ Service unavailable`,
+      buttons: [[mainMenuBtn()]],
+      parseMode: 'Markdown',
+    };
+  }
+
+  try {
+    const config = await ctx.copyTrading.getConfig(configId);
+    if (!config) {
+      throw new Error('Subscription not found');
+    }
+
+    const platforms = config.platforms || {};
+    platforms.kalshi = {
+      ...platforms.kalshi,
+      enabled: platforms.kalshi?.enabled ?? false,
+      maxSize: platforms.kalshi?.maxSize || 500,
+      momentumThreshold: thresholdNum,
+    };
+
+    await ctx.copyTrading.updateConfig(configId, { platforms });
+
+    return {
+      text: `✅ *Momentum Threshold Set to ${thresholdNum}%*
+
+Kalshi signals must now have at least ${thresholdNum}% confidence to trigger a copy trade.`,
+      buttons: [
+        [btn('🎯 Threshold Settings', `copy:threshold:${configId}`)],
+        [btn('🔙 Platform Settings', `copy:platforms:${configId}`)],
+        [mainMenuBtn()],
+      ],
+      parseMode: 'Markdown',
+    };
+  } catch (error) {
+    logger.error({ error, threshold, configId }, 'Failed to set threshold');
+    return {
+      text: `❌ *Failed to Set Threshold*
+
+Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      buttons: [
+        [btn('🔄 Try Again', `copy:threshold:${configId}`)],
+        [mainMenuBtn()],
+      ],
+      parseMode: 'Markdown',
+    };
+  }
 }
