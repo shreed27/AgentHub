@@ -14,14 +14,37 @@ import { logger } from '../utils/logger';
 import { createCopyTradingService, type CopyTradingService, type CopyTradingConfig, type CopiedTrade, type CopyTradingStats } from './copy-trading';
 import { createExecutionService, type ExecutionService, type ExecutionConfig } from '../execution/index';
 import type { WhaleTracker, WhaleTrade } from '../feeds/polymarket/whale-tracker';
+import type { UnifiedWhaleTracker, WhaleTrade as UnifiedWhaleTrade, WhalePlatform } from './whale-tracker-unified';
 import type { CredentialsManager } from '../credentials/index';
 import type { PairingService } from '../pairing/index';
 import type { Database } from '../db/index';
-import type { PolymarketCredentials, KalshiCredentials } from '../types';
+import type { PolymarketCredentials, KalshiCredentials, HyperliquidCredentials } from '../types';
 
 // =============================================================================
 // TYPES
 // =============================================================================
+
+/** Platform-specific settings for copy trading */
+export interface PlatformSettings {
+  polymarket?: {
+    enabled: boolean;
+    maxSize: number;
+  };
+  hyperliquid?: {
+    enabled: boolean;
+    maxSize: number;
+    /** Match whale's leverage (capped at user's maxLeverage) */
+    matchLeverage: boolean;
+    /** Maximum leverage to use (even if whale uses more) */
+    maxLeverage: number;
+  };
+  kalshi?: {
+    enabled: boolean;
+    maxSize: number;
+    /** Minimum momentum confidence score to copy (0-100) */
+    momentumThreshold: number;
+  };
+}
 
 export interface CopyTradingConfigRecord {
   id: string;
@@ -44,6 +67,13 @@ export interface CopyTradingConfigRecord {
   totalPnl: number;
   createdAt: Date;
   updatedAt: Date;
+  // Multi-platform settings (NEW)
+  /** Platform-specific settings */
+  platforms?: PlatformSettings;
+  /** Enable instant execution mode (0 delay for high priority) */
+  instantMode?: boolean;
+  /** Maximum slippage percentage before aborting */
+  maxSlippagePercent?: number;
 }
 
 export interface CopyTradeRecord {
@@ -63,6 +93,13 @@ export interface CopyTradeRecord {
   pnl?: number;
   createdAt: Date;
   closedAt?: Date;
+  // Multi-platform fields (NEW)
+  /** Platform where trade was executed */
+  platform?: WhalePlatform;
+  /** Leverage used (for perpetuals) */
+  leverage?: number;
+  /** Actual slippage experienced */
+  slippageActual?: number;
 }
 
 export interface CreateCopyConfigInput {
@@ -83,6 +120,13 @@ export interface CreateCopyConfigInput {
   allocationPercent?: number;
   stopLossPercent?: number;
   takeProfitPercent?: number;
+  // Multi-platform settings (NEW)
+  /** Platform-specific settings */
+  platforms?: PlatformSettings;
+  /** Enable instant execution mode (0 delay for high priority) */
+  instantMode?: boolean;
+  /** Maximum slippage percentage before aborting */
+  maxSlippagePercent?: number;
 }
 
 interface CopyTradingSession {
@@ -156,16 +200,31 @@ function initializeDatabase(db: Database): void {
       portfolioPercentage REAL DEFAULT 5,
       maxPositionSize REAL DEFAULT 500,
       minTradeSize REAL DEFAULT 1000,
-      copyDelayMs INTEGER DEFAULT 5000,
-      maxSlippage REAL DEFAULT 2,
+      copyDelayMs INTEGER DEFAULT 0,
+      maxSlippage REAL DEFAULT 3,
       stopLoss REAL,
       takeProfit REAL,
       totalTrades INTEGER DEFAULT 0,
       totalPnl REAL DEFAULT 0,
       createdAt TEXT NOT NULL,
-      updatedAt TEXT NOT NULL
+      updatedAt TEXT NOT NULL,
+      -- Multi-platform columns (optimized for ultra-low latency)
+      platforms TEXT DEFAULT '{"polymarket":{"enabled":true,"maxSize":500}}',
+      instantMode INTEGER DEFAULT 1,
+      maxSlippagePercent REAL DEFAULT 3.0
     )
   `);
+
+  // Add columns to existing tables (migration-safe)
+  try {
+    db.run(`ALTER TABLE copy_trading_configs ADD COLUMN platforms TEXT DEFAULT '{"polymarket":{"enabled":true,"maxSize":500}}'`);
+  } catch { /* Column may already exist */ }
+  try {
+    db.run(`ALTER TABLE copy_trading_configs ADD COLUMN instantMode INTEGER DEFAULT 0`);
+  } catch { /* Column may already exist */ }
+  try {
+    db.run(`ALTER TABLE copy_trading_configs ADD COLUMN maxSlippagePercent REAL DEFAULT 2.0`);
+  } catch { /* Column may already exist */ }
 
   db.run(`
     CREATE INDEX IF NOT EXISTS idx_copy_configs_wallet
@@ -196,9 +255,24 @@ function initializeDatabase(db: Database): void {
       pnl REAL,
       createdAt TEXT NOT NULL,
       closedAt TEXT,
+      -- Multi-platform columns
+      platform TEXT DEFAULT 'polymarket',
+      leverage REAL,
+      slippageActual REAL,
       FOREIGN KEY (configId) REFERENCES copy_trading_configs(id)
     )
   `);
+
+  // Add columns to existing tables (migration-safe)
+  try {
+    db.run(`ALTER TABLE copy_trades ADD COLUMN platform TEXT DEFAULT 'polymarket'`);
+  } catch { /* Column may already exist */ }
+  try {
+    db.run(`ALTER TABLE copy_trades ADD COLUMN leverage REAL`);
+  } catch { /* Column may already exist */ }
+  try {
+    db.run(`ALTER TABLE copy_trades ADD COLUMN slippageActual REAL`);
+  } catch { /* Column may already exist */ }
 
   db.run(`
     CREATE INDEX IF NOT EXISTS idx_copy_trades_wallet
@@ -278,6 +352,20 @@ export function createCopyTradingOrchestrator(
         };
       }
 
+      // Also load Hyperliquid credentials if available
+      const hlCreds = await credentialsManager.getCredentials<HyperliquidCredentials>(
+        walletAddress,
+        'hyperliquid'
+      );
+
+      if (hlCreds?.privateKey) {
+        execConfig.hyperliquid = {
+          privateKey: hlCreds.privateKey,
+          walletAddress: hlCreds.walletAddress || walletAddress,
+          testnet: hlCreds.testnet || false,
+        };
+      }
+
       return createExecutionService(execConfig);
     } catch (error) {
       logger.error({ error, walletAddress }, 'Failed to create execution service');
@@ -286,6 +374,17 @@ export function createCopyTradingOrchestrator(
   }
 
   function configRecordToCopyConfig(record: CopyTradingConfigRecord): CopyTradingConfig {
+    // Build enabled platforms list from settings
+    const enabledPlatforms: Array<'polymarket' | 'kalshi' | 'hyperliquid'> = [];
+    if (record.platforms?.polymarket?.enabled) enabledPlatforms.push('polymarket');
+    if (record.platforms?.kalshi?.enabled) enabledPlatforms.push('kalshi');
+    if (record.platforms?.hyperliquid?.enabled) enabledPlatforms.push('hyperliquid');
+
+    // Default to polymarket if none specified
+    if (enabledPlatforms.length === 0) {
+      enabledPlatforms.push('polymarket', 'kalshi');
+    }
+
     return {
       followedAddresses: [record.targetWallet],
       sizingMode: record.sizingMode,
@@ -294,16 +393,31 @@ export function createCopyTradingOrchestrator(
       portfolioPercentage: record.portfolioPercentage,
       maxPositionSize: record.maxPositionSize,
       minTradeSize: record.minTradeSize,
-      copyDelayMs: record.copyDelayMs,
-      maxSlippage: record.maxSlippage,
+      copyDelayMs: record.instantMode ? 0 : record.copyDelayMs, // Instant mode = 0 delay
+      maxSlippage: record.maxSlippagePercent || record.maxSlippage,
       stopLoss: record.stopLoss,
       takeProfit: record.takeProfit,
       dryRun: record.dryRun,
-      enabledPlatforms: ['polymarket', 'kalshi'],
+      enabledPlatforms,
+      // Multi-platform settings
+      platforms: record.platforms,
+      instantMode: record.instantMode,
     };
   }
 
   function rowToConfigRecord(row: any): CopyTradingConfigRecord {
+    // Parse platforms JSON
+    let platforms: PlatformSettings | undefined;
+    if (row.platforms) {
+      try {
+        platforms = typeof row.platforms === 'string'
+          ? JSON.parse(row.platforms)
+          : row.platforms;
+      } catch {
+        platforms = { polymarket: { enabled: true, maxSize: 500 } };
+      }
+    }
+
     return {
       id: row.id,
       userWallet: row.userWallet,
@@ -317,14 +431,18 @@ export function createCopyTradingOrchestrator(
       portfolioPercentage: row.portfolioPercentage || 5,
       maxPositionSize: row.maxPositionSize || 500,
       minTradeSize: row.minTradeSize || 1000,
-      copyDelayMs: row.copyDelayMs || 5000,
-      maxSlippage: row.maxSlippage || 2,
+      copyDelayMs: row.copyDelayMs ?? 0,        // Default 0 for instant
+      maxSlippage: row.maxSlippage || 3,        // Increased tolerance
       stopLoss: row.stopLoss,
       takeProfit: row.takeProfit,
       totalTrades: row.totalTrades || 0,
       totalPnl: row.totalPnl || 0,
       createdAt: new Date(row.createdAt),
       updatedAt: new Date(row.updatedAt),
+      // Multi-platform fields - optimized for low latency
+      platforms,
+      instantMode: row.instantMode !== 0,      // Default true
+      maxSlippagePercent: row.maxSlippagePercent || 3.0,
     };
   }
 
@@ -346,6 +464,10 @@ export function createCopyTradingOrchestrator(
       pnl: row.pnl,
       createdAt: new Date(row.createdAt),
       closedAt: row.closedAt ? new Date(row.closedAt) : undefined,
+      // Multi-platform fields
+      platform: row.platform as WhalePlatform || 'polymarket',
+      leverage: row.leverage,
+      slippageActual: row.slippageActual,
     };
   }
 
@@ -536,8 +658,8 @@ export function createCopyTradingOrchestrator(
         input.portfolioPercentage ?? 5,
         input.maxPositionSize ?? 500,
         input.minTradeSize ?? 1000,
-        input.copyDelayMs ?? 5000,
-        input.maxSlippage ?? 2,
+        input.copyDelayMs ?? 0,            // Default 0 for instant execution
+        input.maxSlippage ?? 3,            // Increased tolerance for speed
         stopLoss || null,
         takeProfit || null,
         now,

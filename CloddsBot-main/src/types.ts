@@ -304,6 +304,20 @@ export interface DriftCredentials {
 }
 
 /**
+ * Hyperliquid credentials (decrypted form)
+ */
+export interface HyperliquidCredentials {
+  /** EVM private key for signing */
+  privateKey: string;
+  /** Wallet address (derived from private key if not provided) */
+  walletAddress?: string;
+  /** Use testnet instead of mainnet */
+  testnet?: boolean;
+  /** Vault address for sub-account trading (optional) */
+  vaultAddress?: string;
+}
+
+/**
  * Smarkets credentials (decrypted form)
  */
 export interface SmarketsCredentials {
