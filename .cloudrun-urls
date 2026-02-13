@@ -1,0 +1,6 @@
+gateway=https://gateway-6f65ip4gea-uc.a.run.app
+orchestrator=https://orchestrator-6f65ip4gea-uc.a.run.app
+agent-dex=https://agent-dex-6f65ip4gea-uc.a.run.app
+openclaw=https://openclaw-6f65ip4gea-uc.a.run.app
+cloddsbot=https://cloddsbot-6f65ip4gea-uc.a.run.app
+frontend=https://frontend-6f65ip4gea-uc.a.run.app

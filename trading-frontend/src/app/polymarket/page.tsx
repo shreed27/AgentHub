@@ -1,993 +1,520 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  TrendingUp,
-  TrendingDown,
   Activity,
   DollarSign,
   Search,
   RefreshCw,
-  AlertTriangle,
-  Zap,
-  X,
-  ChevronRight,
-  Clock,
+  TrendingUp,
   BarChart3,
-  Users,
-  Wallet,
-  Target,
-  CheckCircle2,
-  XCircle,
-  Filter,
-  Sparkles,
   Globe,
-  Building2,
-  Gamepad2,
   Cpu,
-  Beaker,
-  Banknote,
-  Film,
-  ExternalLink,
+  ArrowUpRight,
+  ArrowDownRight,
+  Target,
+  Zap,
+  Wallet,
+  X,
+  TrendingDown
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import api from "@/lib/api";
+import { useDemoTrading } from "@/lib/useDemoTrading";
+import dynamic from "next/dynamic";
+
+const TradingViewChart = dynamic(() => import("@/components/charts/TradingViewChart"), { ssr: false });
 
 // ==================== Types ====================
 
-interface PolymarketMarket {
+interface CryptoMarket {
   id: string;
-  question: string;
-  slug: string;
-  outcomes: Array<{
-    tokenId: string;
-    name: string;
-    price: number;
-  }>;
+  symbol: string;
+  name: string;
+  price: number;
+  change24h: number;
   volume24h: number;
-  totalVolume: number;
-  liquidity: number;
-  endDate: string;
-  active: boolean;
-  category?: string;
+  marketCap: number;
+  high24h: number;
+  low24h: number;
+  category: string;
+  sparkline: number[];
 }
-
-interface PolymarketPosition {
-  id: string;
-  platform: "polymarket";
-  marketId: string;
-  marketQuestion?: string;
-  outcome: "yes" | "no";
-  shares: number;
-  entryPrice: number;
-  currentPrice: number;
-  cost: number;
-  value: number;
-  pnl: number;
-  pnlPercent: number;
-  openedAt: string;
-}
-
-// ==================== Demo Data ====================
-
-const DEMO_MARKETS: PolymarketMarket[] = [
-  {
-    id: "demo-trump-2024",
-    question: "Will Donald Trump win the 2024 Presidential Election?",
-    slug: "trump-2024",
-    outcomes: [
-      { tokenId: "yes-trump", name: "Yes", price: 0.52 },
-      { tokenId: "no-trump", name: "No", price: 0.48 },
-    ],
-    volume24h: 2_450_000,
-    totalVolume: 89_000_000,
-    liquidity: 4_200_000,
-    endDate: "2024-11-05T00:00:00Z",
-    active: true,
-    category: "politics",
-  },
-  {
-    id: "demo-btc-100k",
-    question: "Will Bitcoin exceed $100,000 by December 31, 2024?",
-    slug: "btc-100k-2024",
-    outcomes: [
-      { tokenId: "yes-btc", name: "Yes", price: 0.38 },
-      { tokenId: "no-btc", name: "No", price: 0.62 },
-    ],
-    volume24h: 890_000,
-    totalVolume: 24_500_000,
-    liquidity: 1_800_000,
-    endDate: "2024-12-31T23:59:59Z",
-    active: true,
-    category: "crypto",
-  },
-  {
-    id: "demo-fed-rate",
-    question: "Will the Federal Reserve cut rates in March 2025?",
-    slug: "fed-rate-march-2025",
-    outcomes: [
-      { tokenId: "yes-fed", name: "Yes", price: 0.67 },
-      { tokenId: "no-fed", name: "No", price: 0.33 },
-    ],
-    volume24h: 456_000,
-    totalVolume: 8_900_000,
-    liquidity: 920_000,
-    endDate: "2025-03-19T00:00:00Z",
-    active: true,
-    category: "economy",
-  },
-  {
-    id: "demo-eth-10k",
-    question: "Will Ethereum reach $10,000 before 2026?",
-    slug: "eth-10k-2025",
-    outcomes: [
-      { tokenId: "yes-eth", name: "Yes", price: 0.24 },
-      { tokenId: "no-eth", name: "No", price: 0.76 },
-    ],
-    volume24h: 320_000,
-    totalVolume: 5_600_000,
-    liquidity: 680_000,
-    endDate: "2025-12-31T23:59:59Z",
-    active: true,
-    category: "crypto",
-  },
-  {
-    id: "demo-superbowl",
-    question: "Will the Kansas City Chiefs win Super Bowl 2025?",
-    slug: "superbowl-2025-chiefs",
-    outcomes: [
-      { tokenId: "yes-chiefs", name: "Yes", price: 0.31 },
-      { tokenId: "no-chiefs", name: "No", price: 0.69 },
-    ],
-    volume24h: 780_000,
-    totalVolume: 12_300_000,
-    liquidity: 1_450_000,
-    endDate: "2025-02-09T00:00:00Z",
-    active: true,
-    category: "sports",
-  },
-  {
-    id: "demo-agi-2025",
-    question: "Will OpenAI announce AGI by end of 2025?",
-    slug: "agi-2025",
-    outcomes: [
-      { tokenId: "yes-agi", name: "Yes", price: 0.08 },
-      { tokenId: "no-agi", name: "No", price: 0.92 },
-    ],
-    volume24h: 234_000,
-    totalVolume: 3_400_000,
-    liquidity: 420_000,
-    endDate: "2025-12-31T23:59:59Z",
-    active: true,
-    category: "science",
-  },
-  {
-    id: "demo-sol-flip",
-    question: "Will Solana flip Ethereum market cap in 2025?",
-    slug: "sol-flip-eth-2025",
-    outcomes: [
-      { tokenId: "yes-sol", name: "Yes", price: 0.12 },
-      { tokenId: "no-sol", name: "No", price: 0.88 },
-    ],
-    volume24h: 567_000,
-    totalVolume: 7_800_000,
-    liquidity: 890_000,
-    endDate: "2025-12-31T23:59:59Z",
-    active: true,
-    category: "crypto",
-  },
-  {
-    id: "demo-recession",
-    question: "Will the US enter a recession by Q4 2025?",
-    slug: "us-recession-2025",
-    outcomes: [
-      { tokenId: "yes-recess", name: "Yes", price: 0.29 },
-      { tokenId: "no-recess", name: "No", price: 0.71 },
-    ],
-    volume24h: 345_000,
-    totalVolume: 6_200_000,
-    liquidity: 720_000,
-    endDate: "2025-10-01T00:00:00Z",
-    active: true,
-    category: "economy",
-  },
-];
-
-const CATEGORIES = [
-  { id: "all", label: "All Markets", icon: Globe },
-  { id: "politics", label: "Politics", icon: Building2 },
-  { id: "crypto", label: "Crypto", icon: Banknote },
-  { id: "sports", label: "Sports", icon: Gamepad2 },
-  { id: "economy", label: "Economy", icon: BarChart3 },
-  { id: "science", label: "Science", icon: Beaker },
-  { id: "entertainment", label: "Entertainment", icon: Film },
-  { id: "tech", label: "Technology", icon: Cpu },
-];
 
 // ==================== Helper Functions ====================
 
 function formatCurrency(value: number): string {
-  if (value >= 1_000_000) {
-    return `$${(value / 1_000_000).toFixed(1)}M`;
-  }
-  if (value >= 1_000) {
-    return `$${(value / 1_000).toFixed(1)}K`;
-  }
+  if (value >= 1_000_000_000) return `$${(value / 1_000_000_000).toFixed(2)}B`;
+  if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(2)}M`;
+  if (value >= 1_000) return `$${(value / 1_000).toFixed(2)}K`;
   return `$${value.toFixed(2)}`;
 }
 
-function formatDate(dateStr: string): string {
-  const date = new Date(dateStr);
-  return date.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
+const FEATURED_SYMBOLS = ["BTC", "ETH", "SOL"];
 
-function getTimeUntil(dateStr: string): string {
-  const now = new Date();
-  const end = new Date(dateStr);
-  const diff = end.getTime() - now.getTime();
-
-  if (diff < 0) return "Ended";
-
-  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-  if (days > 30) {
-    const months = Math.floor(days / 30);
-    return `${months}mo`;
+const MOCK_CRYPTO: CryptoMarket[] = [
+  {
+    id: "bitcoin",
+    symbol: "BTC",
+    name: "Bitcoin",
+    price: 96450.42,
+    change24h: 2.45,
+    volume24h: 35000000000,
+    marketCap: 1800000000000,
+    high24h: 97500.0,
+    low24h: 94000.0,
+    category: "Currency",
+    sparkline: [40, 45, 42, 48, 55, 52, 60]
+  },
+  {
+    id: "ethereum",
+    symbol: "ETH",
+    name: "Ethereum",
+    price: 2750.18,
+    change24h: -1.2,
+    volume24h: 15152000000,
+    marketCap: 330000000000,
+    high24h: 2820.0,
+    low24h: 2710.0,
+    category: "L1 Platform",
+    sparkline: [30, 28, 35, 32, 28, 25, 22]
+  },
+  {
+    id: "solana",
+    symbol: "SOL",
+    name: "Solana",
+    price: 188.45,
+    change24h: 5.67,
+    volume24h: 4200000000,
+    marketCap: 87000000000,
+    high24h: 192.0,
+    low24h: 180.0,
+    category: "L1 High-Speed",
+    sparkline: [20, 25, 30, 35, 45, 55, 65]
   }
-  if (days > 0) return `${days}d`;
-
-  const hours = Math.floor(diff / (1000 * 60 * 60));
-  if (hours > 0) return `${hours}h`;
-
-  const mins = Math.floor(diff / (1000 * 60));
-  return `${mins}m`;
-}
+];
 
 // ==================== Components ====================
 
-function MarketCard({
-  market,
-  isSelected,
-  onClick,
-}: {
-  market: PolymarketMarket;
-  isSelected: boolean;
-  onClick: () => void;
-}) {
-  const yesOutcome = market.outcomes.find(
-    (o) => o.name.toLowerCase() === "yes"
-  );
-  const noOutcome = market.outcomes.find((o) => o.name.toLowerCase() === "no");
-  const yesPrice = yesOutcome?.price ?? 0.5;
-  const noPrice = noOutcome?.price ?? 0.5;
+function CryptoCard({ crypto, isSelected, onClick }: { crypto: CryptoMarket; isSelected: boolean; onClick: () => void }) {
+  const isPositive = crypto.change24h >= 0;
 
   return (
     <motion.div
       layout
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -20 }}
+      whileHover={{ y: -5 }}
       onClick={onClick}
       className={cn(
-        "p-5 rounded-2xl border cursor-pointer transition-all duration-300",
+        "group relative overflow-hidden p-8 cursor-pointer transition-all duration-500 rounded-[32px] border bg-surface/30 backdrop-blur-md",
         isSelected
-          ? "bg-white/[0.08] border-blue-500/50 shadow-[0_0_20px_rgba(59,130,246,0.15)]"
-          : "bg-white/[0.02] border-white/[0.05] hover:bg-white/[0.05] hover:border-white/[0.1]"
+          ? "border-blue-500/40 shadow-[0_0_40px_rgba(59,130,246,0.1)]"
+          : "border-white/[0.04] hover:border-white/[0.1] hover:bg-white/[0.03] shadow-lg"
       )}
     >
-      {/* Question */}
-      <h3 className="text-[15px] font-semibold text-white mb-4 leading-snug line-clamp-2">
-        {market.question}
-      </h3>
+      {/* Background Glow */}
+      <div className={cn(
+        "absolute top-0 right-0 w-32 h-32 rounded-full blur-3xl -mr-16 -mt-16 opacity-20 transition-all",
+        isPositive ? "bg-emerald-500" : "bg-rose-500"
+      )} />
 
-      {/* Prices */}
-      <div className="flex items-center gap-3 mb-4">
-        <div className="flex-1 bg-green-500/10 rounded-xl p-3 border border-green-500/20">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-green-400">YES</span>
-            <CheckCircle2 className="w-3.5 h-3.5 text-green-400" />
-          </div>
-          <p className="text-xl font-bold text-white mt-1">
-            {(yesPrice * 100).toFixed(0)}%
-          </p>
-          <p className="text-[11px] text-[#86868b] mt-0.5">
-            ${yesPrice.toFixed(2)}
-          </p>
-        </div>
-        <div className="flex-1 bg-red-500/10 rounded-xl p-3 border border-red-500/20">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-red-400">NO</span>
-            <XCircle className="w-3.5 h-3.5 text-red-400" />
-          </div>
-          <p className="text-xl font-bold text-white mt-1">
-            {(noPrice * 100).toFixed(0)}%
-          </p>
-          <p className="text-[11px] text-[#86868b] mt-0.5">
-            ${noPrice.toFixed(2)}
-          </p>
-        </div>
-      </div>
-
-      {/* Stats */}
-      <div className="flex items-center justify-between text-[11px] text-[#86868b]">
-        <div className="flex items-center gap-1">
-          <Activity className="w-3 h-3" />
-          <span>{formatCurrency(market.volume24h)} 24h</span>
-        </div>
-        <div className="flex items-center gap-1">
-          <Wallet className="w-3 h-3" />
-          <span>{formatCurrency(market.liquidity)}</span>
-        </div>
-        <div className="flex items-center gap-1">
-          <Clock className="w-3 h-3" />
-          <span>{getTimeUntil(market.endDate)}</span>
-        </div>
-      </div>
-    </motion.div>
-  );
-}
-
-function TradingPanel({
-  market,
-  onClose,
-  onTrade,
-  isTrading,
-}: {
-  market: PolymarketMarket | null;
-  onClose: () => void;
-  onTrade: (side: "yes" | "no", amount: number) => void;
-  isTrading: boolean;
-}) {
-  const [selectedSide, setSelectedSide] = useState<"yes" | "no">("yes");
-  const [amount, setAmount] = useState("");
-
-  if (!market) return null;
-
-  const yesOutcome = market.outcomes.find(
-    (o) => o.name.toLowerCase() === "yes"
-  );
-  const noOutcome = market.outcomes.find((o) => o.name.toLowerCase() === "no");
-  const selectedPrice =
-    selectedSide === "yes"
-      ? yesOutcome?.price ?? 0.5
-      : noOutcome?.price ?? 0.5;
-  const amountNum = parseFloat(amount) || 0;
-  const shares = amountNum > 0 ? amountNum / selectedPrice : 0;
-  const potentialPayout = shares;
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, x: 20 }}
-      animate={{ opacity: 1, x: 0 }}
-      exit={{ opacity: 0, x: 20 }}
-      className="bg-white/[0.03] border border-white/[0.08] rounded-2xl p-6 sticky top-4"
-    >
       {/* Header */}
-      <div className="flex items-start justify-between mb-6">
-        <div className="flex-1 pr-4">
-          <h3 className="text-sm font-bold text-white mb-1">Trade</h3>
-          <p className="text-xs text-[#86868b] line-clamp-2">
-            {market.question}
-          </p>
+      <div className="flex justify-between items-start gap-6 mb-8">
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 rounded-2xl bg-white/[0.03] border border-white/[0.05] flex items-center justify-center font-black text-white text-lg">
+            {crypto.symbol[0]}
+          </div>
+          <div className="flex flex-col">
+            <h3 className="text-lg font-black text-white leading-tight font-mono tracking-tighter group-hover:text-blue-400 transition-colors">
+              {crypto.name}
+            </h3>
+            <span className="text-[10px] font-black font-mono text-zinc-500 uppercase tracking-widest">{crypto.symbol} / USDT</span>
+          </div>
         </div>
-        <button
-          onClick={onClose}
-          className="p-1.5 rounded-lg hover:bg-white/[0.05] transition-colors"
-        >
-          <X className="w-4 h-4 text-[#86868b]" />
-        </button>
+        <span className="shrink-0 text-[10px] font-black font-mono text-zinc-500 uppercase tracking-[0.2em] border border-white/[0.06] px-3 py-1.5 rounded-xl bg-black/40">
+          {crypto.category}
+        </span>
       </div>
 
-      {/* Side Selection */}
-      <div className="grid grid-cols-2 gap-2 mb-6">
-        <button
-          onClick={() => setSelectedSide("yes")}
-          className={cn(
-            "p-4 rounded-xl border transition-all duration-200",
-            selectedSide === "yes"
-              ? "bg-green-500/20 border-green-500/50"
-              : "bg-white/[0.02] border-white/[0.05] hover:bg-white/[0.05]"
-          )}
-        >
-          <div className="flex items-center justify-center gap-2">
-            <CheckCircle2
-              className={cn(
-                "w-5 h-5",
-                selectedSide === "yes" ? "text-green-400" : "text-[#86868b]"
-              )}
-            />
-            <span
-              className={cn(
-                "font-bold text-lg",
-                selectedSide === "yes" ? "text-green-400" : "text-white"
-              )}
-            >
-              YES
-            </span>
-          </div>
-          <p className="text-xl font-bold text-white mt-2">
-            ${(yesOutcome?.price ?? 0.5).toFixed(2)}
-          </p>
-        </button>
-        <button
-          onClick={() => setSelectedSide("no")}
-          className={cn(
-            "p-4 rounded-xl border transition-all duration-200",
-            selectedSide === "no"
-              ? "bg-red-500/20 border-red-500/50"
-              : "bg-white/[0.02] border-white/[0.05] hover:bg-white/[0.05]"
-          )}
-        >
-          <div className="flex items-center justify-center gap-2">
-            <XCircle
-              className={cn(
-                "w-5 h-5",
-                selectedSide === "no" ? "text-red-400" : "text-[#86868b]"
-              )}
-            />
-            <span
-              className={cn(
-                "font-bold text-lg",
-                selectedSide === "no" ? "text-red-400" : "text-white"
-              )}
-            >
-              NO
-            </span>
-          </div>
-          <p className="text-xl font-bold text-white mt-2">
-            ${(noOutcome?.price ?? 0.5).toFixed(2)}
-          </p>
-        </button>
-      </div>
-
-      {/* Amount Input */}
+      {/* Price Detail */}
       <div className="mb-6">
-        <label className="text-xs font-medium text-[#86868b] mb-2 block">
-          Amount (USD)
-        </label>
-        <div className="relative">
-          <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#86868b]" />
-          <input
-            type="number"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            placeholder="0.00"
-            className="w-full bg-white/[0.03] border border-white/[0.08] rounded-xl py-3 pl-9 pr-4 text-white placeholder-[#86868b] focus:outline-none focus:border-blue-500/50"
+        <div className="flex items-baseline gap-3">
+          <span className="text-3xl font-black font-mono text-white tracking-tighter">
+            ${crypto.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </span>
+          <div className={cn(
+            "flex items-center gap-1 text-[11px] font-black font-mono py-1 px-2.5 rounded-lg",
+            isPositive ? "bg-emerald-500/10 text-emerald-500" : "bg-rose-500/10 text-rose-500"
+          )}>
+            {isPositive ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
+            {Math.abs(crypto.change24h)}%
+          </div>
+        </div>
+      </div>
+
+      {/* Mini Visual Line */}
+      <div className="h-16 flex items-end gap-1 mb-8 overflow-hidden">
+        {crypto.sparkline.map((h, i) => (
+          <motion.div
+            key={i}
+            initial={{ height: 0 }}
+            animate={{ height: `${h}%` }}
+            className={cn(
+              "flex-1 rounded-full opacity-60 group-hover:opacity-100 transition-opacity",
+              isPositive ? "bg-emerald-500/40" : "bg-rose-500/40"
+            )}
           />
-        </div>
-        {/* Quick amounts */}
-        <div className="flex gap-2 mt-2">
-          {[25, 50, 100, 250].map((val) => (
-            <button
-              key={val}
-              onClick={() => setAmount(String(val))}
-              className="flex-1 py-1.5 text-xs font-medium text-[#86868b] bg-white/[0.03] rounded-lg hover:bg-white/[0.05] hover:text-white transition-colors"
-            >
-              ${val}
-            </button>
-          ))}
-        </div>
+        ))}
       </div>
 
-      {/* Estimate */}
-      <div className="bg-white/[0.02] rounded-xl p-4 mb-6 space-y-2">
-        <div className="flex justify-between text-sm">
-          <span className="text-[#86868b]">Est. Shares</span>
-          <span className="text-white font-medium">{shares.toFixed(2)}</span>
+      {/* Footer Stats */}
+      <div className="flex items-center justify-between border-t border-white/[0.04] pt-6 group-hover:border-white/[0.08] transition-colors gap-4">
+        <div className="flex-1 flex flex-col gap-1">
+          <span className="text-[9px] font-black font-mono text-zinc-600 uppercase tracking-widest">Market_Cap</span>
+          <span className="text-xs font-black font-mono text-white tracking-widest">{formatCurrency(crypto.marketCap)}</span>
         </div>
-        <div className="flex justify-between text-sm">
-          <span className="text-[#86868b]">Potential Payout</span>
-          <span className="text-green-400 font-medium">
-            ${potentialPayout.toFixed(2)}
-          </span>
+        <div className="flex-1 flex flex-col gap-1 border-l border-white/[0.04] pl-4">
+          <span className="text-[9px] font-black font-mono text-zinc-600 uppercase tracking-widest">Vol_24h</span>
+          <span className="text-xs font-black font-mono text-zinc-400 tracking-widest">{formatCurrency(crypto.volume24h)}</span>
         </div>
-        <div className="flex justify-between text-sm">
-          <span className="text-[#86868b]">Potential Profit</span>
-          <span className="text-green-400 font-medium">
-            +${(potentialPayout - amountNum).toFixed(2)}
-          </span>
-        </div>
-      </div>
-
-      {/* Trade Button */}
-      <button
-        onClick={() => onTrade(selectedSide, amountNum)}
-        disabled={amountNum <= 0 || isTrading}
-        className={cn(
-          "w-full py-3.5 rounded-xl font-bold text-white transition-all duration-200",
-          selectedSide === "yes"
-            ? "bg-gradient-to-r from-green-600 to-green-500 hover:from-green-500 hover:to-green-400"
-            : "bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-400",
-          (amountNum <= 0 || isTrading) && "opacity-50 cursor-not-allowed"
-        )}
-      >
-        {isTrading ? (
-          <RefreshCw className="w-4 h-4 animate-spin mx-auto" />
-        ) : (
-          `Buy ${selectedSide.toUpperCase()} for $${amountNum.toFixed(2)}`
-        )}
-      </button>
-
-      {/* Paper trading notice */}
-      <div className="flex items-center justify-center gap-1.5 mt-4 text-[11px] text-[#86868b]">
-        <Sparkles className="w-3 h-3 text-blue-400" />
-        <span>Paper trading - No real money at risk</span>
+        <button className="h-10 w-10 flex items-center justify-center rounded-xl bg-white/[0.03] border border-white/[0.05] text-zinc-500 hover:text-blue-500 hover:bg-blue-500/10 hover:border-blue-500/20 transition-all">
+          <Target className="w-4 h-4" />
+        </button>
       </div>
     </motion.div>
-  );
-}
-
-function PositionCard({
-  position,
-  onClose,
-  isClosing,
-}: {
-  position: PolymarketPosition;
-  onClose: () => void;
-  isClosing: boolean;
-}) {
-  return (
-    <div className="bg-white/[0.02] border border-white/[0.05] rounded-xl p-4">
-      <div className="flex items-start justify-between mb-3">
-        <div className="flex-1">
-          <p className="text-sm font-medium text-white line-clamp-1">
-            {position.marketQuestion || position.marketId}
-          </p>
-          <div className="flex items-center gap-2 mt-1">
-            <span
-              className={cn(
-                "px-2 py-0.5 rounded-full text-[10px] font-bold uppercase",
-                position.outcome === "yes"
-                  ? "bg-green-500/20 text-green-400"
-                  : "bg-red-500/20 text-red-400"
-              )}
-            >
-              {position.outcome}
-            </span>
-            <span className="text-[11px] text-[#86868b]">
-              {position.shares.toFixed(2)} shares
-            </span>
-          </div>
-        </div>
-        <div className="text-right">
-          <p
-            className={cn(
-              "text-sm font-bold",
-              position.pnl >= 0 ? "text-green-400" : "text-red-400"
-            )}
-          >
-            {position.pnl >= 0 ? "+" : ""}${position.pnl.toFixed(2)}
-          </p>
-          <p className="text-[11px] text-[#86868b]">
-            {position.pnlPercent >= 0 ? "+" : ""}
-            {position.pnlPercent.toFixed(1)}%
-          </p>
-        </div>
-      </div>
-      <div className="flex items-center justify-between text-[11px] text-[#86868b] mb-3">
-        <span>Entry: ${position.entryPrice.toFixed(2)}</span>
-        <span>Current: ${position.currentPrice.toFixed(2)}</span>
-      </div>
-      <button
-        onClick={onClose}
-        disabled={isClosing}
-        className="w-full py-2 text-xs font-medium text-red-400 bg-red-500/10 rounded-lg hover:bg-red-500/20 transition-colors disabled:opacity-50"
-      >
-        {isClosing ? "Closing..." : "Close Position"}
-      </button>
-    </div>
   );
 }
 
 // ==================== Main Page ====================
 
-export default function PolymarketPage() {
-  // State
-  const [markets, setMarkets] = useState<PolymarketMarket[]>([]);
-  const [positions, setPositions] = useState<PolymarketPosition[]>([]);
-  const [selectedMarket, setSelectedMarket] = useState<PolymarketMarket | null>(
-    null
-  );
-  const [selectedCategory, setSelectedCategory] = useState("all");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [isLoading, setIsLoading] = useState(true);
-  const [isTrading, setIsTrading] = useState(false);
-  const [closingPositionId, setClosingPositionId] = useState<string | null>(
-    null
-  );
-  const [connectionStatus, setConnectionStatus] = useState<
-    "connected" | "demo" | "error"
-  >("demo");
-  const [totalPnl, setTotalPnl] = useState(0);
-  const [lastRefresh, setLastRefresh] = useState(Date.now());
+export default function CryptoMarketsPage() {
+  const [cryptos, setCryptos] = useState<CryptoMarket[]>(MOCK_CRYPTO);
+  const [allSymbols, setAllSymbols] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [search, setSearch] = useState("");
+  const [selectedAsset, setSelectedAsset] = useState<CryptoMarket | null>(null);
+  const [livePrice, setLivePrice] = useState<number>(0);
+  const [orderAmount, setOrderAmount] = useState<string>("");
+  const wsRef = useRef<WebSocket | null>(null);
 
-  // Fetch markets
-  const fetchMarkets = useCallback(async () => {
-    try {
-      const response = await api.getPolymarketMarkets({ active: true, limit: 50 });
-      if (response.success && response.data && Array.isArray(response.data) && response.data.length > 0) {
-        setMarkets(response.data);
-        setConnectionStatus("connected");
-      } else {
-        // Use demo data
-        setMarkets(DEMO_MARKETS);
-        setConnectionStatus("demo");
-      }
-    } catch (error) {
-      console.error("Failed to fetch markets:", error);
-      setMarkets(DEMO_MARKETS);
-      setConnectionStatus("demo");
-    } finally {
-      setIsLoading(false);
-      setLastRefresh(Date.now());
-    }
-  }, []);
+  const { balance, executeTrade, updateLivePrice } = useDemoTrading();
 
-  // Fetch positions
-  const fetchPositions = useCallback(async () => {
-    try {
-      const response = await api.getSidexPolymarketPositions();
-      if (response.success && response.data && Array.isArray(response.data)) {
-        setPositions(response.data);
-        const total = response.data.reduce(
-          (sum: number, p: PolymarketPosition) => sum + (p.pnl || 0),
-          0
-        );
-        setTotalPnl(total);
-      }
-    } catch (error) {
-      console.error("Failed to fetch positions:", error);
-    }
-  }, []);
-
-  // Initial load and polling
+  // Fetch all symbols for search index
   useEffect(() => {
-    fetchMarkets();
-    fetchPositions();
+    const fetchAllSymbols = async () => {
+      try {
+        const response = await fetch('https://api.binance.com/api/v3/exchangeInfo');
+        const data = await response.json();
+        const usdtSymbols = data.symbols
+          .filter((s: any) => s.quoteAsset === 'USDT' && s.status === 'TRADING')
+          .map((s: any) => ({
+            id: s.symbol.toLowerCase(),
+            symbol: s.baseAsset,
+            name: s.baseAsset,
+            price: 0,
+            change24h: 0,
+            volume24h: 0,
+            marketCap: 0,
+            high24h: 0,
+            low24h: 0,
+            category: "Spot Market",
+            sparkline: Array.from({ length: 10 }, () => 20 + Math.random() * 60)
+          }));
+        setAllSymbols(usdtSymbols);
+      } catch (err) {
+        console.error("Failed to fetch all symbols", err);
+      }
+    };
+    fetchAllSymbols();
+  }, []);
 
-    const interval = setInterval(() => {
-      fetchMarkets();
-      fetchPositions();
-    }, 30000);
+  // Sync featured prices
+  useEffect(() => {
+    const syncPrices = async () => {
+      try {
+        const response = await fetch('https://api.binance.com/api/v3/ticker/24hr');
+        const data = await response.json();
 
+        setCryptos(prev => prev.map(c => {
+          const ticker = data.find((t: any) => t.symbol === `${c.symbol}USDT`);
+          if (ticker) {
+            return {
+              ...c,
+              price: parseFloat(ticker.lastPrice),
+              change24h: parseFloat(ticker.priceChangePercent),
+              volume24h: parseFloat(ticker.quoteVolume),
+              high24h: parseFloat(ticker.highPrice),
+              low24h: parseFloat(ticker.lowPrice)
+            };
+          }
+          return c;
+        }));
+      } catch (err) {
+        console.error("Failed to sync prices", err);
+      }
+    };
+    syncPrices();
+    const interval = setInterval(syncPrices, 10000);
     return () => clearInterval(interval);
-  }, [fetchMarkets, fetchPositions]);
+  }, []);
 
-  // Filter markets
-  const filteredMarkets = markets.filter((market) => {
-    const matchesCategory =
-      selectedCategory === "all" || market.category === selectedCategory;
-    const matchesSearch =
-      searchQuery === "" ||
-      market.question.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesCategory && matchesSearch;
-  });
+  const connectWebSocket = useCallback((symbol: string) => {
+    if (wsRef.current) wsRef.current.close();
 
-  // Trade handler
-  const handleTrade = async (side: "yes" | "no", amount: number) => {
-    if (!selectedMarket || amount <= 0) return;
+    const ws = new WebSocket(`wss://stream.binance.com:9443/ws/${symbol.toLowerCase()}usdt@ticker`);
+    wsRef.current = ws;
 
-    setIsTrading(true);
-    try {
-      const response = await api.sidexTradePolymarket({
-        marketId: selectedMarket.id,
-        side,
-        shares: amount / (side === "yes"
-          ? (selectedMarket.outcomes.find(o => o.name.toLowerCase() === "yes")?.price ?? 0.5)
-          : (selectedMarket.outcomes.find(o => o.name.toLowerCase() === "no")?.price ?? 0.5)),
-      });
+    ws.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      if (data.c) {
+        const price = parseFloat(data.c);
+        setLivePrice(price);
+        updateLivePrice(`${symbol.toUpperCase()}/USDT`, price);
 
-      if (response.success) {
-        // Refresh positions
-        await fetchPositions();
-        setSelectedMarket(null);
-      } else {
-        console.error("Trade failed:", response.error);
+        // Update the grid price too if it's visible
+        setCryptos(prev => prev.map(c => {
+          if (c.symbol === symbol.toUpperCase()) {
+            return { ...c, price };
+          }
+          return c;
+        }));
       }
-    } catch (error) {
-      console.error("Trade error:", error);
-    } finally {
-      setIsTrading(false);
+    };
+
+    return () => ws.close();
+  }, [updateLivePrice]);
+
+  useEffect(() => {
+    if (selectedAsset) {
+      setLivePrice(selectedAsset.price);
+      connectWebSocket(selectedAsset.symbol);
+    } else {
+      setLivePrice(0);
+      if (wsRef.current) wsRef.current.close();
     }
-  };
+  }, [selectedAsset, connectWebSocket]);
 
-  // Close position handler
-  const handleClosePosition = async (positionId: string) => {
-    setClosingPositionId(positionId);
+  const filteredCryptos = search.trim() === ""
+    ? cryptos
+    : allSymbols.filter(c =>
+      c.symbol.toLowerCase().includes(search.toLowerCase())
+    ).slice(0, 50);
+
+  const displayedCryptos = search.trim() === ""
+    ? filteredCryptos.slice(0, 3)
+    : filteredCryptos;
+
+  const handlePlaceOrder = (type: "buy" | "sell") => {
+    if (!selectedAsset || !orderAmount || isNaN(parseFloat(orderAmount))) return;
     try {
-      const response = await api.sidexClosePolymarket(positionId);
-      if (response.success) {
-        await fetchPositions();
-      }
-    } catch (error) {
-      console.error("Close position error:", error);
-    } finally {
-      setClosingPositionId(null);
+      executeTrade({
+        symbol: `${selectedAsset.symbol}/USDT`,
+        type,
+        amount: parseFloat(orderAmount),
+        price: livePrice || selectedAsset.price
+      });
+      setOrderAmount("");
+    } catch (err: any) {
+      alert(err.message);
     }
   };
 
   return (
-    <div className="space-y-8 pb-20 pt-4">
-      {/* Header */}
-      <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-3 mb-2">
-            <h1 className="text-apple-title text-5xl md:text-6xl font-bold tracking-tight">
-              Polymarket
-            </h1>
-            <div
-              className={cn(
-                "px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5",
-                connectionStatus === "connected"
-                  ? "bg-green-500/20 text-green-400 border border-green-500/30"
-                  : connectionStatus === "demo"
-                  ? "bg-blue-500/20 text-blue-400 border border-blue-500/30"
-                  : "bg-red-500/20 text-red-400 border border-red-500/30"
-              )}
-            >
-              {connectionStatus === "connected" ? (
-                <>
-                  <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-                  Live
-                </>
-              ) : connectionStatus === "demo" ? (
-                <>
-                  <Sparkles className="w-3 h-3" />
-                  Demo
-                </>
-              ) : (
-                <>
-                  <AlertTriangle className="w-3 h-3" />
-                  Error
-                </>
-              )}
+    <div className="relative min-h-screen">
+      <div className={cn("space-y-10 pb-20 transition-all duration-500", selectedAsset ? "pr-[400px]" : "")}>
+
+        {/* Control Header */}
+        <div className="shrink-0 flex items-center justify-between gap-6 p-6 rounded-3xl border border-white/[0.04] bg-surface/50 backdrop-blur-2xl shadow-xl relative overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-r from-blue-500/[0.02] to-transparent pointer-events-none" />
+
+          <div className="flex items-center gap-6">
+            <div className="flex flex-col gap-1">
+              <span className="text-[9px] font-black font-mono text-zinc-600 uppercase tracking-[0.3em] leading-none italic">Market_Overview</span>
+              <h2 className="text-xl font-black font-mono text-white tracking-widest uppercase">Spot Markets</h2>
+            </div>
+            <div className="h-10 w-[1px] bg-white/[0.06]" />
+            <div className="flex flex-col gap-1">
+              <span className="text-[9px] font-black font-mono text-zinc-600 uppercase tracking-[0.3em] leading-none italic">Protocol_Status</span>
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse shadow-[0_0_8px_#3b82f6]" />
+                <span className="text-xs font-black font-mono text-blue-500 uppercase tracking-widest">NETWORK_LIVE_FEED</span>
+              </div>
             </div>
           </div>
-          <p className="text-[#86868b] text-lg font-medium">
-            Live prediction markets with real-time data
-          </p>
-        </div>
 
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => {
-              fetchMarkets();
-              fetchPositions();
-            }}
-            className="p-2.5 rounded-xl bg-white/[0.03] border border-white/[0.05] hover:bg-white/[0.05] transition-colors"
-          >
-            <RefreshCw className="w-4 h-4 text-[#86868b]" />
-          </button>
-          <a
-            href="https://polymarket.com"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/[0.03] border border-white/[0.05] hover:bg-white/[0.05] transition-colors text-sm text-[#86868b] hover:text-white"
-          >
-            <ExternalLink className="w-4 h-4" />
-            <span>polymarket.com</span>
-          </a>
-        </div>
-      </header>
-
-      {/* Stats Bar */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-white/[0.02] border border-white/[0.05] rounded-2xl p-4">
-          <div className="flex items-center gap-2 text-[#86868b] mb-2">
-            <BarChart3 className="w-4 h-4" />
-            <span className="text-xs font-medium">Total Volume</span>
-          </div>
-          <p className="text-2xl font-bold text-white">
-            {formatCurrency(
-              markets.reduce((sum, m) => sum + m.totalVolume, 0)
-            )}
-          </p>
-        </div>
-        <div className="bg-white/[0.02] border border-white/[0.05] rounded-2xl p-4">
-          <div className="flex items-center gap-2 text-[#86868b] mb-2">
-            <Activity className="w-4 h-4" />
-            <span className="text-xs font-medium">Active Markets</span>
-          </div>
-          <p className="text-2xl font-bold text-white">{markets.length}</p>
-        </div>
-        <div className="bg-white/[0.02] border border-white/[0.05] rounded-2xl p-4">
-          <div className="flex items-center gap-2 text-[#86868b] mb-2">
-            <Target className="w-4 h-4" />
-            <span className="text-xs font-medium">Your Positions</span>
-          </div>
-          <p className="text-2xl font-bold text-white">{positions.length}</p>
-        </div>
-        <div className="bg-white/[0.02] border border-white/[0.05] rounded-2xl p-4">
-          <div className="flex items-center gap-2 text-[#86868b] mb-2">
-            <DollarSign className="w-4 h-4" />
-            <span className="text-xs font-medium">Total P&L</span>
-          </div>
-          <p
-            className={cn(
-              "text-2xl font-bold",
-              totalPnl >= 0 ? "text-green-400" : "text-red-400"
-            )}
-          >
-            {totalPnl >= 0 ? "+" : ""}${totalPnl.toFixed(2)}
-          </p>
-        </div>
-      </div>
-
-      {/* Search and Filters */}
-      <div className="flex flex-col md:flex-row gap-4">
-        {/* Search */}
-        <div className="relative flex-1">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[#86868b]" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search markets..."
-            className="w-full bg-white/[0.02] border border-white/[0.05] rounded-xl py-3 pl-11 pr-4 text-white placeholder-[#86868b] focus:outline-none focus:border-blue-500/50"
-          />
-        </div>
-
-        {/* Category Pills */}
-        <div className="flex gap-2 overflow-x-auto pb-2 md:pb-0 scrollbar-hide">
-          {CATEGORIES.map((cat) => {
-            const Icon = cat.icon;
-            return (
-              <button
-                key={cat.id}
-                onClick={() => setSelectedCategory(cat.id)}
-                className={cn(
-                  "flex items-center gap-2 px-4 py-2.5 rounded-xl whitespace-nowrap text-sm font-medium transition-all duration-200",
-                  selectedCategory === cat.id
-                    ? "bg-blue-500/20 text-blue-400 border border-blue-500/30"
-                    : "bg-white/[0.02] text-[#86868b] border border-white/[0.05] hover:bg-white/[0.05] hover:text-white"
-                )}
-              >
-                <Icon className="w-4 h-4" />
-                <span>{cat.label}</span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Main Content */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Markets List */}
-        <div className="lg:col-span-2 space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-bold text-white">
-              {selectedCategory === "all"
-                ? "All Markets"
-                : CATEGORIES.find((c) => c.id === selectedCategory)?.label}
-            </h2>
-            <span className="text-sm text-[#86868b]">
-              {filteredMarkets.length} markets
-            </span>
-          </div>
-
-          {isLoading ? (
-            <div className="grid gap-4">
-              {[1, 2, 3, 4].map((i) => (
-                <div
-                  key={i}
-                  className="h-[180px] bg-white/[0.02] rounded-2xl animate-pulse"
-                />
-              ))}
-            </div>
-          ) : filteredMarkets.length === 0 ? (
-            <div className="text-center py-12">
-              <Search className="w-12 h-12 text-[#86868b] mx-auto mb-4" />
-              <p className="text-[#86868b]">No markets found</p>
-            </div>
-          ) : (
-            <div className="grid gap-4">
-              <AnimatePresence>
-                {filteredMarkets.map((market) => (
-                  <MarketCard
-                    key={market.id}
-                    market={market}
-                    isSelected={selectedMarket?.id === market.id}
-                    onClick={() =>
-                      setSelectedMarket(
-                        selectedMarket?.id === market.id ? null : market
-                      )
-                    }
-                  />
-                ))}
-              </AnimatePresence>
-            </div>
-          )}
-        </div>
-
-        {/* Right Panel */}
-        <div className="space-y-6">
-          {/* Trading Panel */}
-          <AnimatePresence>
-            {selectedMarket && (
-              <TradingPanel
-                market={selectedMarket}
-                onClose={() => setSelectedMarket(null)}
-                onTrade={handleTrade}
-                isTrading={isTrading}
+          <div className="flex items-center gap-4">
+            <div className="relative w-64 group">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-600 group-focus-within:text-blue-500 transition-colors" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="SEARCH_10,000+_ASSETS..."
+                className="w-full bg-black/40 border border-white/[0.06] rounded-2xl py-2.5 pl-11 pr-4 text-[10px] font-black font-mono text-white placeholder:text-zinc-700 outline-none focus:border-blue-500/30 focus:bg-black/60 transition-all uppercase tracking-widest"
               />
-            )}
+            </div>
+            <button
+              onClick={() => setIsLoading(true)}
+              className="flex items-center gap-3 px-6 py-2.5 rounded-2xl bg-white/[0.03] border border-white/[0.05] text-[10px] font-black font-mono uppercase tracking-widest text-zinc-400 hover:bg-white/[0.08] hover:text-white transition-all disabled:opacity-50"
+            >
+              <RefreshCw className={cn("w-3.5 h-3.5", isLoading && "animate-spin")} />
+              Sync_Index
+            </button>
+          </div>
+        </div>
+
+        {/* Metrics Grid */}
+        <div className="grid grid-cols-4 gap-6">
+          {[
+            { label: "Total_Dominance", value: "BTC: 58.4%", icon: Activity, trend: "+1.2%", trendUp: true },
+            { label: "Global_Volume", value: "$84.2B", icon: BarChart3, trend: "+15.8%", trendUp: true, color: "text-blue-500" },
+            { label: "Market_Cap", value: "$3.12T", icon: DollarSign, trend: "+2.1%", trendUp: true },
+            { label: "Network_Load", value: "OPTIMAL", icon: Cpu, trend: "0.4s Latency", trendUp: true, color: "text-blue-400" },
+          ].map((stat, i) => (
+            <div key={i} className="p-8 rounded-3xl border border-white/[0.04] bg-surface/30 backdrop-blur-md relative overflow-hidden group hover:border-white/[0.08] transition-all">
+              <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                <stat.icon className="w-12 h-12 text-white" />
+              </div>
+              <div className="flex items-center gap-3 mb-4 text-zinc-500">
+                <span className="text-[10px] font-black font-mono uppercase tracking-[0.2em]">{stat.label}</span>
+              </div>
+              <div className={cn("text-3xl font-black font-mono text-white tracking-tighter mb-2", stat.color)}>
+                {stat.value}
+              </div>
+              <div className={cn("text-[10px] font-black font-mono uppercase tracking-widest", stat.trendUp ? "text-emerald-500" : "text-rose-500")}>
+                {stat.trend}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Main Asset Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8">
+          <AnimatePresence mode="popLayout">
+            {displayedCryptos.map((crypto) => (
+              <CryptoCard
+                key={crypto.id}
+                crypto={crypto}
+                isSelected={selectedAsset?.id === crypto.id}
+                onClick={() => setSelectedAsset(selectedAsset?.id === crypto.id ? null : crypto)}
+              />
+            ))}
           </AnimatePresence>
+        </div>
 
-          {/* Positions */}
-          {positions.length > 0 && (
-            <div className="bg-white/[0.02] border border-white/[0.05] rounded-2xl p-5">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-bold text-white">Your Positions</h3>
-                <span
-                  className={cn(
-                    "text-sm font-bold",
-                    totalPnl >= 0 ? "text-green-400" : "text-red-400"
-                  )}
-                >
-                  {totalPnl >= 0 ? "+" : ""}${totalPnl.toFixed(2)}
-                </span>
-              </div>
-              <div className="space-y-3">
-                {positions.map((position) => (
-                  <PositionCard
-                    key={position.id}
-                    position={position}
-                    onClose={() => handleClosePosition(position.id)}
-                    isClosing={closingPositionId === position.id}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
+        {/* Empty State / Hint */}
+        {search.trim() === "" && (
+          <div className="pt-20 flex flex-col items-center justify-center opacity-40">
+            <Globe className="w-12 h-12 text-zinc-700 mb-6" />
+            <p className="text-[10px] font-black font-mono text-zinc-600 uppercase tracking-[0.5em] text-center max-w-sm leading-relaxed">
+              Search over 10,000+ assets indexed from global liquidity pools.
+            </p>
+          </div>
+        )}
 
-          {/* Help Card */}
-          {!selectedMarket && positions.length === 0 && (
-            <div className="bg-gradient-to-br from-blue-500/10 to-purple-500/10 border border-blue-500/20 rounded-2xl p-6">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="p-2 rounded-xl bg-blue-500/20">
-                  <Zap className="w-5 h-5 text-blue-400" />
-                </div>
-                <h3 className="text-sm font-bold text-white">
-                  How to Trade
-                </h3>
-              </div>
-              <ol className="space-y-3 text-sm text-[#86868b]">
-                <li className="flex items-start gap-2">
-                  <span className="flex-shrink-0 w-5 h-5 rounded-full bg-white/[0.05] flex items-center justify-center text-xs text-white">
-                    1
-                  </span>
-                  <span>Select a market from the list</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="flex-shrink-0 w-5 h-5 rounded-full bg-white/[0.05] flex items-center justify-center text-xs text-white">
-                    2
-                  </span>
-                  <span>Choose YES or NO based on your prediction</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="flex-shrink-0 w-5 h-5 rounded-full bg-white/[0.05] flex items-center justify-center text-xs text-white">
-                    3
-                  </span>
-                  <span>Enter your trade amount and execute</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="flex-shrink-0 w-5 h-5 rounded-full bg-white/[0.05] flex items-center justify-center text-xs text-white">
-                    4
-                  </span>
-                  <span>Track your positions and P&L in real-time</span>
-                </li>
-              </ol>
-              <div className="mt-4 pt-4 border-t border-white/[0.05] text-[11px] text-[#86868b]">
-                This is paper trading - no real money is at risk.
-              </div>
-            </div>
-          )}
+        {/* Footer */}
+        <div className="pt-10 flex items-center justify-center gap-4 opacity-40">
+          <div className="h-[1px] w-24 bg-gradient-to-r from-transparent to-white/10" />
+          <span className="text-[9px] font-black font-mono text-zinc-600 uppercase tracking-[0.5em] italic">Session_Secured_v2.4.1</span>
+          <div className="h-[1px] w-24 bg-gradient-to-l from-transparent to-white/10" />
         </div>
       </div>
+
+      {/* Execution Sidebar Overlay */}
+      <AnimatePresence>
+        {selectedAsset && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setSelectedAsset(null)}
+              className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40"
+            />
+            <motion.div
+              initial={{ x: 400, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              exit={{ x: 400, opacity: 0 }}
+              className="fixed inset-y-0 right-0 w-[400px] bg-surface/90 backdrop-blur-3xl border-l border-white/[0.08] shadow-2xl p-8 flex flex-col z-50 pt-24"
+            >
+              <div className="absolute inset-0 bg-gradient-to-b from-blue-500/[0.03] to-transparent pointer-events-none" />
+
+              <div className="flex items-center justify-between mb-10 relative z-10">
+                <div className="flex items-center gap-3 text-blue-500">
+                  <Zap className="w-5 h-5 fill-blue-500/20" />
+                  <span className="text-[12px] font-black font-mono uppercase tracking-[0.2em]">Execution_Node</span>
+                </div>
+                <button
+                  onClick={() => setSelectedAsset(null)}
+                  className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-zinc-500 hover:text-white transition-all"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="flex-1 flex flex-col min-h-0 relative z-10">
+                <div className="flex flex-col gap-2 mb-8 shrink-0">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-2xl font-black text-white font-mono tracking-tighter uppercase italic">{selectedAsset.symbol}_Index</h3>
+                    <div className="px-2 py-0.5 rounded-lg bg-blue-500/10 border border-blue-500/20 text-[9px] font-black font-mono text-blue-500 uppercase tracking-widest">LIVE</div>
+                  </div>
+                  <div className="text-4xl font-black text-white font-mono tracking-tighter">
+                    ${(livePrice || selectedAsset.price).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-black font-mono text-zinc-500 uppercase tracking-widest italic">Network_Consensus</span>
+                  </div>
+                </div>
+
+                <div className="flex-1 w-full bg-black/40 rounded-3xl overflow-hidden border border-white/[0.05] relative min-h-[250px] mb-8">
+                  <TradingViewChart symbol={`${selectedAsset.symbol}USDT`} theme="dark" autosize={true} />
+                </div>
+
+                <div className="space-y-6">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/[0.04]">
+                      <span className="text-[9px] font-black font-mono text-zinc-600 uppercase tracking-widest block mb-1 text-center">24h_High</span>
+                      <span className="text-sm font-black font-mono text-white tracking-widest text-center block">${selectedAsset.high24h.toLocaleString()}</span>
+                    </div>
+                    <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/[0.04]">
+                      <span className="text-[9px] font-black font-mono text-zinc-600 uppercase tracking-widest block mb-1 text-center">24h_Low</span>
+                      <span className="text-sm font-black font-mono text-white tracking-widest text-center block">${selectedAsset.low24h.toLocaleString()}</span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="relative group">
+                      <span className="absolute left-6 top-1/2 -translate-y-1/2 text-[9px] font-black font-mono text-zinc-600 uppercase tracking-widest">Amount</span>
+                      <input
+                        type="text"
+                        value={orderAmount}
+                        onChange={(e) => setOrderAmount(e.target.value)}
+                        placeholder="0.00"
+                        className="w-full bg-black/40 border border-white/[0.06] rounded-2xl py-5 pl-24 pr-6 text-xl font-black font-mono text-white placeholder:text-zinc-800 outline-none focus:border-blue-500/30 transition-all uppercase"
+                      />
+                      <div className="absolute right-6 top-1/2 -translate-y-1/2 text-[10px] font-black font-mono text-zinc-500">{selectedAsset.symbol}</div>
+                    </div>
+
+                    <div className="flex gap-4">
+                      <button
+                        onClick={() => handlePlaceOrder("buy")}
+                        className="flex-1 h-14 rounded-2xl bg-emerald-500 hover:bg-emerald-600 text-black font-black uppercase tracking-[0.2em] text-[11px] transition-all flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(16,185,129,0.1)]"
+                      >
+                        Long <ArrowUpRight className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => handlePlaceOrder("sell")}
+                        className="flex-1 h-14 rounded-2xl bg-rose-500 hover:bg-rose-600 text-black font-black uppercase tracking-[0.2em] text-[11px] transition-all flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(239,68,68,0.1)]"
+                      >
+                        Short <ArrowDownRight className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

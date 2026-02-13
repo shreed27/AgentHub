@@ -17,7 +17,11 @@ interface Log {
 
 export function SystemLogs() {
     const [logs, setLogs] = useState<Log[]>([
-        { id: "init", timestamp: new Date().toLocaleTimeString([], { hour12: false }), type: "info", message: "Terminal initialized. Secure link established." },
+        { id: "init-5", timestamp: new Date().toLocaleTimeString([], { hour12: false }), type: "success", message: "Secure handshake completed. Node encrypted." },
+        { id: "init-4", timestamp: new Date().toLocaleTimeString([], { hour12: false }), type: "info", message: "Market data provider synced: Binance Core V2" },
+        { id: "init-3", timestamp: new Date().toLocaleTimeString([], { hour12: false }), type: "exec", message: "Bounty monitor active. Scanning for liquidation events..." },
+        { id: "init-2", timestamp: new Date().toLocaleTimeString([], { hour12: false }), type: "info", message: "Risk engine initialized. Circuit breakers set to 15% delta." },
+        { id: "init-1", timestamp: new Date().toLocaleTimeString([], { hour12: false }), type: "info", message: "Terminal initialized. Secure link established." },
     ]);
     const socketRef = useRef<Socket | null>(null);
 

@@ -1,7 +1,7 @@
 "use client";
 
 import {
-    LayoutDashboard, Users, Activity, Settings, Wallet, Globe, Zap, Command, Menu, TrendingUp, Cpu, Shovel as Shield
+    LayoutDashboard, Users, Activity, Settings, Wallet, Globe, Zap, Command, Menu, TrendingUp, Cpu, Shield, Terminal, History
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -10,100 +10,98 @@ import { WalletButton } from "@/components/wallet/WalletButton";
 import { motion } from "framer-motion";
 
 const menuItems = [
-    { icon: LayoutDashboard, label: "Overview", href: "/" },
-    { icon: Activity, label: "Terminal", href: "/trading" },
-    { icon: TrendingUp, label: "Predictions", href: "/polymarket" },
-    { icon: Zap, label: "Execution Pro", href: "/sidex" },
-    { icon: Globe, label: "Intelligence", href: "/analytics" },
-    { icon: Users, label: "Agents", href: "/agents" },
-    { icon: Wallet, label: "Portfolio", href: "/portfolio" },
-    { icon: Settings, label: "Settings", href: "/settings" },
+    { icon: LayoutDashboard, label: "DASHBOARD", href: "/", id: "01" },
+    { icon: Terminal, label: "TRADING", href: "/trading", id: "02" },
+    { icon: TrendingUp, label: "MARKETS", href: "/polymarket", id: "03" },
+    { icon: Zap, label: "SIDEX", href: "/sidex", id: "04" },
+    { icon: Globe, label: "ANALYTICS", href: "/analytics", id: "05" },
+    { icon: History, label: "P&L", href: "/pnl", id: "09" },
+    { icon: Users, label: "AGENTS", href: "/agents", id: "06" },
+    // { icon: Wallet, label: "PORTFOLIO", href: "/portfolio", id: "07" },
+    { icon: Settings, label: "SETTINGS", href: "/settings", id: "08" },
 ];
 
 export function Sidebar() {
     const pathname = usePathname();
 
     return (
-        <aside className="h-full w-64 glass-sidebar flex flex-col fixed left-0 top-0 bottom-0 z-50">
-            {/* Branding - Ultra Minimal */}
-            <div className="h-24 flex items-center px-8">
-                <Link href="/" className="flex items-center gap-3 group">
-                    <div className="h-10 w-10 bg-white text-black flex items-center justify-center rounded-xl transition-all duration-500 group-hover:rotate-[15deg] group-hover:scale-110 shadow-[0_0_30px_rgba(255,255,255,0.2)]">
+        <aside className="fixed left-0 top-0 bottom-0 z-50 flex flex-col bg-surface border-r border-white/[0.04] shadow-2xl" style={{ width: 'var(--sidebar-width)' }}>
+            {/* Branding */}
+            <div className="h-20 flex items-center px-8 border-b border-white/[0.04] bg-white/[0.01]">
+                <Link href="/" className="flex items-center gap-4 group">
+                    <div className="h-10 w-10 bg-blue-500 text-black flex items-center justify-center rounded-xl shadow-[0_0_20px_rgba(59,130,246,0.3)] group-hover:shadow-[0_0_30px_rgba(59,130,246,0.5)] transition-all duration-500">
                         <Command className="h-5 w-5" />
                     </div>
-                    <span className="font-bold text-xl tracking-[-0.05em] text-white">
-                        TRACER
-                    </span>
+                    <div className="flex flex-col">
+                        <span className="font-mono font-black text-xl tracking-tighter text-white leading-none uppercase">
+                            Dain
+                        </span>
+                        <span className="text-[10px] font-mono text-blue-500/80 uppercase tracking-[0.3em] font-black leading-none mt-1.5">
+                            V.1
+                        </span>
+                    </div>
                 </Link>
             </div>
 
-            {/* Navigation - Professional & Spaced */}
-            <nav className="flex-1 px-4 space-y-1">
-                <div className="px-4 mb-4">
-                    <span className="text-[10px] font-bold text-white/20 uppercase tracking-[0.2em]">Navigation</span>
+            {/* Navigation */}
+            <nav className="flex-1 overflow-y-auto py-10 px-4 space-y-2">
+                <div className="px-4 mb-4 flex items-center justify-between">
+                    <span className="text-[10px] font-black font-mono text-zinc-600 uppercase tracking-[0.2em]">Navigation</span>
+                    <div className="h-[1px] flex-1 ml-4 bg-white/5" />
                 </div>
                 {menuItems.map((item) => {
                     const isActive = pathname === item.href;
                     return (
-                        <Link
-                            key={item.href}
-                            href={item.href}
-                            className="block relative group"
-                        >
-                            <div className={cn(
-                                "flex items-center gap-3 px-4 py-3 text-[13px] font-medium rounded-2xl transition-all duration-300 relative z-10",
-                                isActive
-                                    ? "text-white"
-                                    : "text-[#a1a1aa] hover:text-white"
-                            )}>
-                                <item.icon className={cn(
-                                    "w-[18px] h-[18px] transition-all duration-300",
-                                    isActive ? "text-white" : "text-[#52525b] group-hover:text-white"
-                                )} />
-                                <span>{item.label}</span>
-
-                                {isActive && (
-                                    <motion.div
-                                        layoutId="sidebar-active"
-                                        className="absolute inset-0 bg-white/[0.05] border border-white/[0.08] rounded-2xl -z-10"
-                                        transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
-                                    />
-                                )}
-                            </div>
-                        </Link>
+                        <div key={item.href} className="mb-2">
+                            <Link
+                                href={item.href}
+                                className="block relative group"
+                            >
+                                <div className={cn(
+                                    "flex items-center justify-between px-4 py-3.5 rounded-2xl text-xs font-mono font-bold border transition-all duration-300",
+                                    isActive
+                                        ? "bg-blue-500/10 border-blue-500/20 text-blue-500 shadow-[0_0_15px_rgba(59,130,246,0.05)]"
+                                        : "text-zinc-500 border-transparent hover:text-white hover:bg-white/[0.03] hover:border-white/5"
+                                )}>
+                                    <div className="flex items-center gap-4">
+                                        <item.icon className={cn("w-4 h-4 transition-colors", isActive ? "text-blue-500" : "text-zinc-600 group-hover:text-zinc-400")} />
+                                        <span className="tracking-[0.15em] uppercase">{item.label}</span>
+                                    </div>
+                                    {isActive && (
+                                        <motion.div
+                                            layoutId="active-nav-glow"
+                                            className="w-1.5 h-1.5 bg-blue-500 rounded-full shadow-[0_0_10px_#3b82f6]"
+                                        />
+                                    )}
+                                </div>
+                            </Link>
+                        </div>
                     );
                 })}
             </nav>
 
-            {/* Status & Wallet Area */}
-            <div className="p-6">
-                <div className="mb-6 px-4 py-4 rounded-2xl bg-white/[0.02] border border-white/[0.04]">
-                    <div className="flex items-center justify-between mb-3 text-[11px] font-bold uppercase tracking-widest text-[#52525b]">
-                        <span>Execution Engine</span>
+            {/* System Status Footer */}
+            <div className="p-6 border-t border-white/[0.04] bg-white/[0.01]">
+                <div className="mb-6">
+                    <div className="flex items-center justify-between mb-4 text-[10px] font-black font-mono uppercase text-zinc-500 tracking-[0.2em]">
+                        <span>Registry_Stats</span>
                         <div className="flex items-center gap-1.5">
-                            <span className="relative flex h-2 w-2">
-                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                            </span>
-                            <span className="text-emerald-500">Online</span>
+                            <div className="w-1.5 h-1.5 rounded-full bg-blue-500 shadow-[0_0_8px_#3b82f6]" />
+                            <span className="text-blue-500">Verified</span>
                         </div>
                     </div>
-                    <div className="space-y-3">
-                        <div className="flex justify-between text-xs">
-                            <span className="text-[#a1a1aa]">Latency</span>
-                            <span className="text-white font-bold">12ms</span>
-                        </div>
-                        <div className="h-1 w-full bg-white/[0.05] rounded-full overflow-hidden">
-                            <motion.div
-                                initial={{ width: "0%" }}
-                                animate={{ width: "12%" }}
-                                className="h-full bg-white"
-                            />
+                    <div className="grid grid-cols-1 gap-2 text-[10px] font-mono text-zinc-400">
+                        <div className="flex items-center justify-between border border-white/5 p-2.5 rounded-xl bg-background/50 hover:border-white/10 transition-colors">
+                            <div className="flex items-center gap-2">
+                                <Globe className="w-3 h-3 text-zinc-600" />
+                                <span>NET: SECURE</span>
+                            </div>
+                            <span className="text-blue-500/70 font-bold">12ms</span>
                         </div>
                     </div>
                 </div>
 
-                <div className="transition-all active:scale-[0.98]">
+                <div className="pt-6 border-t border-white/5">
                     <WalletButton />
                 </div>
             </div>

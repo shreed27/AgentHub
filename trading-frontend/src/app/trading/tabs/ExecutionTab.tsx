@@ -1,12 +1,11 @@
 "use client";
 
-import { motion } from "framer-motion";
-import { ArrowDown, ArrowUp, Activity, Timer, Wallet, Layers, Loader2 } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { ArrowDown, ArrowUp, Activity, Timer, Layers, Search, TrendingUp, Globe, Wallet, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useState, useEffect, useRef } from "react";
-import { io, Socket } from "socket.io-client";
-
-const GATEWAY_URL = process.env.NEXT_PUBLIC_GATEWAY_URL || 'http://localhost:4000';
+import { useState, useEffect, useRef, useCallback } from "react";
+import TradingViewChart from "@/components/charts/TradingViewChart";
+import { useDemoTrading } from "@/lib/useDemoTrading";
 
 interface Order {
     id: string;
@@ -26,257 +25,262 @@ interface Trade {
 }
 
 export default function ExecutionTab() {
+    const [symbol, setSymbol] = useState("SOL/USDT");
+    const [searchInput, setSearchInput] = useState("");
     const [bids, setBids] = useState<Order[]>([]);
     const [asks, setAsks] = useState<Order[]>([]);
     const [trades, setTrades] = useState<Trade[]>([]);
-    const [price, setPrice] = useState(145.20);
+    const [price, setPrice] = useState(0);
+    const [priceChange, setPriceChange] = useState(0);
     const [connected, setConnected] = useState(false);
-    const socketRef = useRef<Socket | null>(null);
+    const [latency, setLatency] = useState(0);
+    const [logTab, setLogTab] = useState<"market" | "portfolio">("market");
 
-    useEffect(() => {
-        const socket = io(GATEWAY_URL, {
-            transports: ['websocket', 'polling'],
-        });
-        socketRef.current = socket;
 
-        socket.on('connect', () => {
-            setConnected(true);
-            socket.emit('subscribe', ['market', 'execution']);
-        });
+    const wsRef = useRef<WebSocket | null>(null);
+    const { balance, trades: demoTrades } = useDemoTrading();
 
-        socket.on('disconnect', () => {
-            setConnected(false);
-        });
+    const normalizeSymbol = (s: string) => s.replace("/", "").toLowerCase();
 
-        socket.on('price_update', (data: { data: { price?: number } }) => {
-            if (data.data?.price) {
-                setPrice(data.data.price);
-            }
-        });
-
-        return () => {
-            socket.disconnect();
-        };
-    }, []);
-
-    // Generate order book based on real price with realistic market structure
-    useEffect(() => {
-        const generateBook = () => {
-            // Use realistic spread based on price (0.01% for SOL)
-            const spread = price * 0.0001;
-            const midPrice = price;
-
-            // Generate bids with realistic depth distribution
-            const newBids = Array.from({ length: 15 }).map((_, i) => {
-                const priceLevel = midPrice - spread - (i * price * 0.0005);
-                const baseSize = 50 / (i + 1);
-                const size = baseSize * (0.8 + Math.random() * 0.4);
-                return {
-                    id: `bid-${i}`,
-                    price: priceLevel,
-                    size: size,
-                    total: size * priceLevel,
-                    type: "bid" as const,
-                    depth: Math.min(80, 20 + (15 - i) * 4)
-                };
-            });
-
-            const newAsks = Array.from({ length: 15 }).map((_, i) => {
-                const priceLevel = midPrice + spread + (i * price * 0.0005);
-                const baseSize = 50 / (i + 1);
-                const size = baseSize * (0.8 + Math.random() * 0.4);
-                return {
-                    id: `ask-${i}`,
-                    price: priceLevel,
-                    size: size,
-                    total: size * priceLevel,
-                    type: "ask" as const,
-                    depth: Math.min(80, 20 + (15 - i) * 4)
-                };
-            });
-
-            setBids(newBids);
-            setAsks(newAsks.reverse());
-        };
-
-        generateBook();
-        const interval = setInterval(generateBook, 2000);
-        return () => clearInterval(interval);
-    }, [price]);
-
-    // Listen for real trades from WebSocket and generate realistic simulated trades
-    useEffect(() => {
-        const socket = socketRef.current;
-
-        const handleTradeExecuted = (data: any) => {
-            const newTrade = {
-                id: data.id || Math.random().toString(36),
-                time: new Date().toLocaleTimeString([], { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" }),
-                price: data.price || price,
-                size: data.amount || data.size || 1,
-                side: data.side === 'buy' ? 'buy' : 'sell' as "buy" | "sell"
-            };
-            setTrades(prev => [newTrade, ...prev].slice(0, 20));
-        };
-
-        if (socket) {
-            socket.on('trade_executed', handleTradeExecuted);
-            socket.on('sidex_agent_trade', handleTradeExecuted);
+    const connectWebSocket = useCallback((targetSymbol: string) => {
+        if (wsRef.current) {
+            wsRef.current.close();
         }
 
-        // Generate realistic trades based on price movement
-        const interval = setInterval(() => {
-            const isBuy = Math.random() > 0.48;
-            const tradeSize = 0.5 + Math.random() * 4.5;
-            const tradePrice = price * (1 + (isBuy ? 1 : -1) * tradeSize * 0.0001);
+        const binanceSymbol = normalizeSymbol(targetSymbol);
+        const ws = new WebSocket(`wss://stream.binance.com:9443/ws`);
+        wsRef.current = ws;
 
-            const newTrade = {
-                id: `t_${Date.now()}`,
-                time: new Date().toLocaleTimeString([], { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" }),
-                price: tradePrice,
-                size: tradeSize,
-                side: isBuy ? "buy" : "sell" as "buy" | "sell"
+        const startTime = Date.now();
+
+        ws.onopen = () => {
+            setConnected(true);
+            setLatency(Date.now() - startTime);
+
+            const msg = {
+                method: "SUBSCRIBE",
+                params: [
+                    `${binanceSymbol}@depth20@100ms`,
+                    `${binanceSymbol}@trade`,
+                    `${binanceSymbol}@ticker`
+                ],
+                id: 1
             };
-            setTrades(prev => [newTrade, ...prev].slice(0, 20));
-        }, 800);
+            ws.send(JSON.stringify(msg));
+        };
 
-        return () => {
-            clearInterval(interval);
-            if (socket) {
-                socket.off('trade_executed', handleTradeExecuted);
-                socket.off('sidex_agent_trade', handleTradeExecuted);
+        ws.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+
+            const bidsData = data.bids || data.b;
+            const asksData = data.asks || data.a;
+
+            if (bidsData || asksData) {
+                if (bidsData) {
+                    const newBids = bidsData.slice(0, 15).map((b: any, i: number) => ({
+                        id: `bid-${i}-${Date.now()}`,
+                        price: parseFloat(b[0]),
+                        size: parseFloat(b[1]),
+                        total: parseFloat(b[0]) * parseFloat(b[1]),
+                        type: "bid" as const,
+                        depth: Math.min(100, (parseFloat(b[1]) / 2) * 100)
+                    }));
+                    setBids(newBids);
+                }
+
+                if (asksData) {
+                    const newAsks = asksData.slice(0, 15).map((a: any, i: number) => ({
+                        id: `ask-${i}-${Date.now()}`,
+                        price: parseFloat(a[0]),
+                        size: parseFloat(a[1]),
+                        total: parseFloat(a[0]) * parseFloat(a[1]),
+                        type: "ask" as const,
+                        depth: Math.min(100, (parseFloat(a[1]) / 2) * 100)
+                    }));
+                    setAsks(newAsks.reverse());
+                }
+            }
+
+            if (data.e === "24hrTicker") {
+                setPrice(parseFloat(data.c));
+                setPriceChange(parseFloat(data.P));
+            }
+
+            if (data.e === "trade" || data.e === "aggTrade") {
+                const newTrade: Trade = {
+                    id: (data.t || data.a).toString(),
+                    time: new Date(data.T || data.E).toLocaleTimeString([], { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" }),
+                    price: parseFloat(data.p),
+                    size: parseFloat(data.q),
+                    side: data.m ? "sell" : "buy"
+                };
+                setTrades(prev => [newTrade, ...prev].slice(0, 25));
+                setPrice(parseFloat(data.p));
             }
         };
-    }, [price]);
+
+        ws.onclose = () => setConnected(false);
+        ws.onerror = () => setConnected(false);
+    }, []);
+
+    useEffect(() => {
+        connectWebSocket(symbol);
+        return () => {
+            if (wsRef.current) wsRef.current.close();
+        };
+    }, [symbol, connectWebSocket]);
+
+    const handleSearch = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (searchInput.trim()) {
+            let s = searchInput.toUpperCase().trim();
+            // Handle cases like "SOL" -> "SOL/USDT", "SOL/USDT" -> "SOL/USDT", "BTCUSDT" -> "BTC/USDT"
+            if (!s.includes("/")) {
+                if (s.endsWith("USDT") && s.length > 4) {
+                    s = `${s.slice(0, -4)}/USDT`;
+                } else if (!["USDT", "USDC", "SOL", "BNB"].includes(s)) {
+                    s = `${s}/USDT`;
+                }
+            }
+            setSymbol(s);
+            setSearchInput("");
+        }
+    };
+
+
 
     return (
-        <div className="h-[calc(100vh-16rem)] flex flex-col gap-6">
-            {/* Top Stats Bar */}
-            <div className="flex items-center gap-6 p-4 rounded-xl border border-white/5 bg-white/[0.02] backdrop-blur-sm">
-                <div className="flex items-center gap-3 pr-6 border-r border-white/5">
-                    <div className={cn(
-                        "w-10 h-10 rounded-lg flex items-center justify-center",
-                        connected ? "bg-blue-500/10 text-blue-400" : "bg-orange-500/10 text-orange-400"
-                    )}>
-                        <Activity className="w-5 h-5" />
+        <div className="h-[calc(100vh-14rem)] flex flex-col gap-5 overflow-hidden">
+            <div className="shrink-0 flex items-center gap-6 p-4 rounded-3xl border border-white/[0.04] bg-surface/50 backdrop-blur-2xl shadow-xl relative overflow-hidden">
+                <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/[0.02] to-transparent pointer-events-none" />
+                <form onSubmit={handleSearch} className="relative w-64 group">
+                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-500 group-focus-within:text-emerald-500 transition-colors" />
+                    <input
+                        type="text"
+                        value={searchInput}
+                        onChange={(e) => setSearchInput(e.target.value)}
+                        placeholder="SEARCH_MARKET..."
+                        className="w-full bg-black/40 border border-white/[0.06] rounded-2xl py-2.5 pl-11 pr-4 text-[10px] font-black font-mono text-white placeholder:text-zinc-700 outline-none focus:border-emerald-500/30 focus:bg-black/60 transition-all uppercase tracking-widest"
+                    />
+                </form>
+                <div className="h-6 w-[1px] bg-white/[0.06]" />
+                <div className="flex items-center gap-10">
+                    <div className="flex flex-col gap-1">
+                        <span className="text-[9px] font-black font-mono text-zinc-600 uppercase tracking-[0.2em] leading-none">Ticker</span>
+                        <span className="text-xs font-black font-mono text-white tracking-widest uppercase">{symbol}</span>
                     </div>
-                    <div>
-                        <div className="text-xs text-muted-foreground uppercase">Market Status</div>
-                        <div className="font-bold text-white flex items-center gap-2">
-                            {connected ? 'Connected' : 'Connecting...'}
-                            <span className={cn(
-                                "w-2 h-2 rounded-full",
-                                connected ? "bg-green-500 animate-pulse" : "bg-orange-500"
-                            )} />
+                    <div className="flex flex-col gap-1">
+                        <span className="text-[9px] font-black font-mono text-zinc-600 uppercase tracking-[0.2em] leading-none">Price_Index</span>
+                        <div className="flex items-center gap-2">
+                            <span className="text-sm font-black font-mono text-white tracking-tighter">
+                                ${price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </span>
+                            <span className={cn("text-[10px] font-bold font-mono", priceChange >= 0 ? "text-emerald-500" : "text-rose-500")}>
+                                {priceChange >= 0 ? "↑" : "↓"} {Math.abs(priceChange).toFixed(2)}%
+                            </span>
+                        </div>
+                    </div>
+                    <div className="flex flex-col gap-1">
+                        <span className="text-[9px] font-black font-mono text-zinc-600 uppercase tracking-[0.2em] leading-none">Latency</span>
+                        <div className="flex items-center gap-2">
+                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_#10b981]" />
+                            <span className="text-xs font-black font-mono text-emerald-500/80">{latency}ms</span>
                         </div>
                     </div>
                 </div>
-                <div className="flex items-center gap-3 pr-6 border-r border-white/5">
-                    <div className="w-10 h-10 rounded-lg bg-purple-500/10 flex items-center justify-center text-purple-400">
-                        <Timer className="w-5 h-5" />
+                <div className="ml-auto flex items-center gap-6 pr-2">
+                    <div className="flex flex-col items-end gap-1">
+                        <span className="text-[9px] font-black font-mono text-zinc-600 uppercase tracking-[0.3em] leading-none italic">Demo_Liquidity</span>
+                        <span className="text-lg font-black font-mono text-emerald-500 tracking-tighter">
+                            ${balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
                     </div>
-                    <div>
-                        <div className="text-xs text-muted-foreground uppercase">Avg Latency</div>
-                        <div className="font-bold text-white font-mono">12.4ms</div>
+                    <div className="p-2.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/20">
+                        <Wallet className="w-5 h-5 text-emerald-500" />
                     </div>
-                </div>
-                <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-orange-500/10 flex items-center justify-center text-orange-400">
-                        <Layers className="w-5 h-5" />
-                    </div>
-                    <div>
-                        <div className="text-xs text-muted-foreground uppercase">Order Depth</div>
-                        <div className="font-bold text-white">$2.4M</div>
-                    </div>
-                </div>
-                <div className="ml-auto text-right">
-                    <div className="text-2xl font-bold font-mono tracking-tight">${price.toFixed(2)}</div>
-                    <div className="text-xs text-green-400 font-mono">+2.4% (24h)</div>
                 </div>
             </div>
 
-            <div className="flex flex-1 gap-6 overflow-hidden">
-                {/* Order Book */}
-                <div className="w-80 flex flex-col rounded-xl border border-white/5 bg-black/40 backdrop-blur-md overflow-hidden">
-                    <div className="p-3 border-b border-white/5 bg-white/[0.02] font-semibold text-sm">Order Book</div>
-                    <div className="flex text-xs text-muted-foreground px-4 py-2 border-b border-white/5">
-                        <span className="w-20">Price</span>
-                        <span className="w-20 text-right">Size</span>
-                        <span className="flex-1 text-right">Total</span>
+            <div className="flex-1 flex gap-5 min-h-0">
+                <div className="w-[300px] flex flex-col rounded-3xl border border-white/[0.04] bg-surface/30 backdrop-blur-md overflow-hidden shadow-xl">
+                    <div className="shrink-0 h-12 px-5 border-b border-white/[0.04] bg-white/[0.01] flex items-center justify-between">
+                        <span className="text-[10px] font-black font-mono text-zinc-500 uppercase tracking-[0.2em]">Flux_Orders</span>
+                        <Layers className="w-3.5 h-3.5 text-zinc-700" />
                     </div>
-
+                    <div className="flex text-[8px] font-black font-mono text-zinc-600 px-5 py-2.5 bg-white/[0.02] border-b border-white/[0.04] uppercase tracking-widest">
+                        <span className="w-1/2">Price_USD</span>
+                        <span className="w-1/4 text-right">Size</span>
+                        <span className="w-1/4 text-right">Liquidity</span>
+                    </div>
                     <div className="flex-1 overflow-hidden flex flex-col">
-                        <div className="flex-1 overflow-hidden flex flex-col justify-end pb-1">
+                        <div className="flex-1 overflow-hidden flex flex-col justify-end">
                             {asks.map((ask) => (
-                                <div key={ask.id} className="relative flex text-xs font-mono py-0.5 px-4 hover:bg-white/5">
-                                    <div className="absolute top-0 right-0 bottom-0 bg-red-500/10 transition-all duration-300" style={{ width: `${ask.depth}%` }} />
-                                    <span className="w-20 text-red-400 relative z-10">{ask.price.toFixed(2)}</span>
-                                    <span className="w-20 text-white/70 text-right relative z-10">{ask.size.toFixed(2)}</span>
-                                    <span className="flex-1 text-white/40 text-right relative z-10">{ask.total.toFixed(0)}</span>
+                                <div key={ask.id} className="relative flex items-center text-[10px] font-mono py-1 px-5 hover:bg-rose-500/5 transition-colors group cursor-crosshair">
+                                    <div className="absolute inset-y-0 right-0 bg-rose-500/10 transition-all duration-300" style={{ width: `${ask.depth}%` }} />
+                                    <span className="w-1/2 text-rose-400 font-bold relative z-10">{ask.price.toFixed(price > 100 ? 2 : 4)}</span>
+                                    <span className="w-1/4 text-zinc-300 text-right relative z-10">{ask.size.toFixed(2)}</span>
+                                    <span className="w-1/4 text-zinc-600 text-right relative z-10">{(ask.total / 1000).toFixed(1)}k</span>
                                 </div>
                             ))}
                         </div>
-
-                        <div className="py-2 px-4 border-y border-white/5 bg-white/[0.02] text-center font-bold font-mono text-lg flex items-center justify-center gap-2">
-                            {price.toFixed(2)} <Activity className="w-3 h-3 text-blue-400" />
-                        </div>
-
-                        <div className="flex-1 overflow-hidden pt-1">
-                            {bids.map((bid) => (
-                                <div key={bid.id} className="relative flex text-xs font-mono py-0.5 px-4 hover:bg-white/5">
-                                    <div className="absolute top-0 right-0 bottom-0 bg-green-500/10 transition-all duration-300" style={{ width: `${bid.depth}%` }} />
-                                    <span className="w-20 text-green-400 relative z-10">{bid.price.toFixed(2)}</span>
-                                    <span className="w-20 text-white/70 text-right relative z-10">{bid.size.toFixed(2)}</span>
-                                    <span className="flex-1 text-white/40 text-right relative z-10">{bid.total.toFixed(0)}</span>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                </div>
-
-                {/* Main Chart Area */}
-                <div className="flex-1 rounded-xl border border-white/5 bg-black/40 backdrop-blur-md flex flex-col relative overflow-hidden">
-                    <div className="absolute inset-0 bg-[url('/grid.svg')] opacity-20" />
-                    <div className="p-3 border-b border-white/5 mx-4 flex justify-between items-center relative z-10">
-                        <span className="font-semibold text-sm">SOL/USDC Execution Map</span>
-                        <div className="flex gap-2">
-                            <button className="px-2 py-1 text-xs rounded bg-white/10 text-white">1m</button>
-                            <button className="px-2 py-1 text-xs rounded hover:bg-white/5 text-muted-foreground">5m</button>
-                            <button className="px-2 py-1 text-xs rounded hover:bg-white/5 text-muted-foreground">15m</button>
-                        </div>
-                    </div>
-                    <div className="flex-1 flex items-center justify-center relative z-10">
-                        <div className="text-center opacity-50">
-                            <Activity className="w-12 h-12 mx-auto mb-4 text-blue-400 animate-pulse" />
-                            <p className="font-mono text-xl">Live Execution Stream</p>
-                            <p className="text-sm text-muted-foreground mt-2">Visualizing High-Frequency Ticks</p>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Live Trades */}
-                <div className="w-64 flex flex-col rounded-xl border border-white/5 bg-black/40 backdrop-blur-md overflow-hidden">
-                    <div className="p-3 border-b border-white/5 bg-white/[0.02] font-semibold text-sm">Recent Trades</div>
-                    <div className="flex text-xs text-muted-foreground px-3 py-2 border-b border-white/5">
-                        <span className="w-16">Time</span>
-                        <span className="w-16">Price</span>
-                        <span className="flex-1 text-right">Size</span>
-                    </div>
-                    <div className="flex-1 overflow-auto scrollbar-hide">
-                        {trades.map((trade) => (
-                            <motion.div
-                                key={trade.id}
-                                initial={{ opacity: 0, x: 20 }}
-                                animate={{ opacity: 1, x: 0 }}
-                                className="flex text-xs font-mono py-1 px-3 hover:bg-white/5"
-                            >
-                                <span className="w-16 text-muted-foreground">{trade.time.split(" ")[0]}</span>
-                                <span className={cn("w-16", trade.side === 'buy' ? "text-green-400" : "text-red-400")}>
-                                    {trade.price.toFixed(2)}
+                        <div className="py-4 px-5 border-y border-white/[0.04] bg-white/[0.02] flex items-center justify-between">
+                            <div className="flex flex-col">
+                                <span className={cn("text-xl font-black font-mono tracking-tighter", priceChange >= 0 ? "text-emerald-500" : "text-rose-500")}>
+                                    {price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                 </span>
-                                <span className="flex-1 text-right text-white/70">{trade.size.toFixed(4)}</span>
-                            </motion.div>
-                        ))}
+                                <span className="text-[8px] font-black font-mono text-zinc-600 uppercase tracking-[0.2em]">Network_Consensus</span>
+                            </div>
+                            <Activity className="w-4 h-4 text-emerald-500/40 animate-pulse" />
+                        </div>
+                        <div className="flex-1 overflow-hidden">
+                            {bids.map((bid) => (
+                                <div key={bid.id} className="relative flex items-center text-[10px] font-mono py-1 px-5 hover:bg-emerald-500/5 transition-colors group cursor-crosshair">
+                                    <div className="absolute inset-y-0 right-0 bg-emerald-500/10 transition-all duration-300" style={{ width: `${bid.depth}%` }} />
+                                    <span className="w-1/2 text-emerald-400 font-bold relative z-10">{bid.price.toFixed(price > 100 ? 2 : 4)}</span>
+                                    <span className="w-1/4 text-zinc-300 text-right relative z-10">{bid.size.toFixed(2)}</span>
+                                    <span className="w-1/4 text-zinc-600 text-right relative z-10">{(bid.total / 1000).toFixed(1)}k</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+
+                <div className="flex-1 flex flex-col gap-5 min-w-0">
+                    <div className="flex-1 flex flex-col rounded-3xl border border-white/[0.06] bg-black overflow-hidden relative shadow-2xl group">
+                        <div className="shrink-0 h-12 px-6 border-b border-white/[0.04] bg-white/[0.02] flex items-center justify-between relative z-10">
+                            <div className="flex items-center gap-3">
+                                <div className="w-2 h-2 rounded-full bg-emerald-500/20 flex items-center justify-center">
+                                    <div className="w-1 h-1 rounded-full bg-emerald-500" />
+                                </div>
+                                <span className="text-[10px] font-black font-mono text-zinc-400 uppercase tracking-[0.3em]">{symbol}_MASTER_RENDER</span>
+                            </div>
+                        </div>
+                        <div className="flex-1 min-h-0">
+                            <TradingViewChart symbol={symbol} />
+                        </div>
+                    </div>
+
+
+                </div>
+
+                <div className="w-[340px] flex flex-col rounded-3xl border border-white/[0.04] bg-surface/30 backdrop-blur-md overflow-hidden shadow-xl">
+                    <div className="shrink-0 h-12 px-6 border-b border-white/[0.04] bg-white/[0.01] flex items-center justify-between">
+                        <span className="text-[10px] font-black font-mono text-zinc-500 uppercase tracking-[0.2em]">Execution_Log</span>
+                        <div className="flex items-center gap-2">
+                            <button onClick={() => setLogTab("market")} className={cn("px-3 py-1 text-[9px] font-black font-mono rounded-lg transition-all", logTab === "market" ? "bg-white/10 text-white" : "text-zinc-600 hover:text-white")}>Market</button>
+                            <button onClick={() => setLogTab("portfolio")} className={cn("px-3 py-1 text-[9px] font-black font-mono rounded-lg transition-all", logTab === "portfolio" ? "bg-white/10 text-white" : "text-zinc-600 hover:text-white")}>My_Trade</button>
+                        </div>
+                    </div>
+                    <div className="flex-1 overflow-auto custom-scrollbar">
+                        <AnimatePresence mode="popLayout">
+                            {(logTab === "market" ? trades : demoTrades).map((t: any) => (
+                                <motion.div key={t.id} layout initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="flex items-center text-[10px] font-mono py-2 px-6 border-b border-white/[0.02]">
+                                    <span className="w-1/3 text-zinc-600 truncate">{t.time}</span>
+                                    <span className={cn("w-1/3 text-right font-black", t.side === "buy" || t.type === "buy" ? "text-emerald-400" : "text-rose-400")}>{t.price}</span>
+                                    <span className="w-1/3 text-right text-zinc-400 font-bold">{t.size || t.amount}</span>
+                                </motion.div>
+                            ))}
+                        </AnimatePresence>
                     </div>
                 </div>
             </div>

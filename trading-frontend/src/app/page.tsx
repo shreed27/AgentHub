@@ -1,244 +1,447 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { MetricCard } from "@/components/dashboard/MetricCard";
-import { AgentGrid } from "@/components/dashboard/AgentGrid";
-import { SignalFeed } from "@/components/trading/SignalFeed";
-import { WhaleAlerts } from "@/components/trading/WhaleAlerts";
-import { AIReasoning } from "@/components/trading/AIReasoning";
-import { AlertTriangle, TrendingUp, Zap, Activity, Layers, Cpu, Play, Rocket, ArrowRight, Sparkles } from "lucide-react";
-import api from "@/lib/api";
-import toast from "react-hot-toast";
-import Link from "next/link";
+import { useEffect, useState, useCallback } from "react";
+import { motion } from "framer-motion";
+import {
+    Activity,
+    Cpu,
+    Globe,
+    Shield,
+    Terminal,
+    Zap,
+    Search,
+    Command,
+    Wifi,
+    Server,
+    Database,
+    Lock,
+    Maximize2,
+    Share2,
+    MoreHorizontal,
+    Play,
+    Pause,
+    RotateCcw,
+    TrendingUp,
+    TrendingDown,
+    DollarSign
+} from "lucide-react";
+import React from 'react';
+import { PositionStream } from "@/components/trading/PositionStream";
 import { cn } from "@/lib/utils";
+import { useDemoTrading } from "@/lib/useDemoTrading";
+import dynamic from 'next/dynamic';
 
-interface DashboardMetrics {
-    totalPnL: number;
-    totalVolume: number;
-    activePositions: number;
-    avgExecutionTime: number;
-    pnlChange: number;
-    volumeChange: number;
-}
+const GlitchText = ({ text }: { text: string }) => {
+    return (
+        <span className="relative inline-block group">
+            <span className="relative z-10">{text}</span>
+            <span className="absolute top-0 left-0 -z-10 w-full h-full text-blue-500 opacity-0 group-hover:opacity-70 animate-pulse translate-x-[1px]">
+                {text}
+            </span>
+            <span className="absolute top-0 left-0 -z-10 w-full h-full text-red-500 opacity-0 group-hover:opacity-70 animate-pulse -translate-x-[1px]">
+                {text}
+            </span>
+        </span>
+    );
+};
 
-export default function Dashboard() {
-    const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [connectionError, setConnectionError] = useState(false);
-
-    const generateSparkline = (value: number, positive: boolean) => {
-        const base = Math.max(value / 10, 10);
-        return Array.from({ length: 12 }, (_, i) => ({
-            value: base + (positive ? Math.sin(i) * 20 + i * 2 : Math.cos(i) * 15 - i) + Math.random() * 10
-        }));
-    };
+const LogStream = () => {
+    const [logs, setLogs] = useState<{ id: string, time: string, type: 'INFO' | 'WARN' | 'EXEC' | 'SUCCESS', msg: string }[]>([
+        { id: '1', time: 'INITIAL', type: 'INFO', msg: 'System initialized v2.4.1' },
+        { id: '2', time: 'INITIAL', type: 'SUCCESS', msg: 'Connected to mainnet node' },
+    ]);
 
     useEffect(() => {
-        async function fetchData() {
-            try {
-                const positionsResponse = await api.getPositions();
-                if (positionsResponse.success && positionsResponse.data) {
-                    const { summary } = positionsResponse.data;
-                    setMetrics({
-                        totalPnL: summary.totalUnrealizedPnL,
-                        totalVolume: summary.totalValue,
-                        activePositions: summary.totalPositions,
-                        avgExecutionTime: 42,
-                        pnlChange: 8.4,
-                        volumeChange: 12.2,
-                    });
-                }
-            } catch (error) {
-                console.error('Failed to fetch dashboard data:', error);
-                setConnectionError(true);
-            } finally {
-                setLoading(false);
-            }
-        }
+        const messages = [
+            { type: 'INFO', msg: 'Scanning mempool for arbitrage opps...' },
+            { type: 'INFO', msg: 'Updating order book depth L2...' },
+            { type: 'EXEC', msg: 'Smart Router: Split trade 4 ways' },
+            { type: 'WARN', msg: 'High volatility detected on SOL-PERP' },
+            { type: 'SUCCESS', msg: 'Block 249102 synced (12ms)' },
+            { type: 'INFO', msg: 'Rebalancing portfolio weights...' },
+            { type: 'EXEC', msg: 'Flash loan simulation: PROFITABLE' },
+            { type: 'INFO', msg: 'Garbage collection: filtered 240 events' },
+            { type: 'WARN', msg: 'Gas price spike: 42 gwei' },
+        ];
 
-        fetchData();
-        const interval = setInterval(fetchData, 30000);
+        const interval = setInterval(() => {
+            const randomMsg = messages[Math.floor(Math.random() * messages.length)];
+            const time = new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+            setLogs(prev => {
+                const newLogs = [...prev, {
+                    id: Math.random().toString(36).substring(7),
+                    time,
+                    type: randomMsg.type as any,
+                    msg: randomMsg.msg
+                }];
+                return newLogs.slice(-20); // Keep last 20
+            });
+        }, 1500);
+
         return () => clearInterval(interval);
     }, []);
 
+    // Auto-scroll dummy ref
+    const endRef = React.useRef<HTMLDivElement>(null);
+    useEffect(() => {
+        endRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, [logs]);
+
+    return null;
+};
+
+// Custom hook for live market data from Binance
+const useLiveMarketData = () => {
+    const symbols = [
+        { symbol: "BTCUSDT", display: "BTC/USDT", mcap: "1.8T" },
+        { symbol: "ETHUSDT", display: "ETH/USDT", mcap: "320B" },
+        { symbol: "SOLUSDT", display: "SOL/USDT", mcap: "85B" },
+        { symbol: "JUPUSDT", display: "JUP/USDT", mcap: "1.6B" },
+        { symbol: "RAYUSDT", display: "RAY/USDT", mcap: "450M" },
+        { symbol: "WIFUSDT", display: "WIF/USDT", mcap: "2.1B" },
+        { symbol: "PEPEUSDT", display: "PEPE/USDT", mcap: "8.5B" },
+        { symbol: "DOGEUSDT", display: "DOGE/USDT", mcap: "45B" },
+        { symbol: "SHIBUSDT", display: "SHIB/USDT", mcap: "12B" },
+        { symbol: "AVAXUSDT", display: "AVAX/USDT", mcap: "15B" },
+    ];
+
+    const [data, setData] = useState<any[]>([]);
+    const prevPricesRef = React.useRef<Record<string, number>>({});
+
+    const fetchMarketData = useCallback(async () => {
+        try {
+            // Fetch 24hr ticker data from our API route (bypasses CORS)
+            const symbolsParam = symbols.map(s => `"${s.symbol}"`).join(',');
+            const response = await fetch(`/api/market/binance?symbols=[${symbolsParam}]`);
+
+            if (!response.ok) throw new Error('Failed to fetch market data');
+
+            const tickers = await response.json();
+
+            const formattedData = tickers.map((ticker: any, idx: number) => {
+                const symbolConfig = symbols[idx];
+                const price = parseFloat(ticker.lastPrice);
+                const change = parseFloat(ticker.priceChangePercent);
+                const high = parseFloat(ticker.highPrice);
+                const low = parseFloat(ticker.lowPrice);
+                const volume = parseFloat(ticker.quoteVolume);
+
+                // Format volume
+                let volStr = "";
+                if (volume >= 1e9) volStr = `${(volume / 1e9).toFixed(1)}B`;
+                else if (volume >= 1e6) volStr = `${(volume / 1e6).toFixed(0)}M`;
+                else if (volume >= 1e3) volStr = `${(volume / 1e3).toFixed(0)}K`;
+                else volStr = volume.toFixed(0);
+
+                // Determine trend based on previous price
+                const prevPrice = prevPricesRef.current[symbolConfig.symbol] || price;
+                const trend = price > prevPrice ? "up" : price < prevPrice ? "down" : "up";
+
+                return {
+                    s: symbolConfig.display,
+                    p: price,
+                    c: change,
+                    h: high,
+                    l: low,
+                    v: volStr,
+                    m: symbolConfig.mcap,
+                    t: trend as "up" | "down"
+                };
+            });
+
+            // Update previous prices for trend detection
+            const newPrevPrices: Record<string, number> = {};
+            tickers.forEach((ticker: any, idx: number) => {
+                newPrevPrices[symbols[idx].symbol] = parseFloat(ticker.lastPrice);
+            });
+            prevPricesRef.current = newPrevPrices;
+
+            setData(formattedData);
+        } catch (error) {
+            console.error('Error fetching market data:', error);
+            // Keep existing data on error
+        }
+    }, []);
+
+    useEffect(() => {
+        // Initial fetch
+        fetchMarketData();
+
+        // Update every 2 seconds
+        const interval = setInterval(fetchMarketData, 2000);
+
+        return () => clearInterval(interval);
+    }, [fetchMarketData]);
+
+    return data;
+};
+
+// Market Ticker Component
+const MarketTicker = ({ data }: { data: any[] }) => {
     return (
-        <div className="space-y-16 pb-20 pt-8">
-            {/* Professional Header Section */}
-            <header className="max-w-3xl">
+        <div className="flex items-center gap-6 overflow-hidden">
+            {data.slice(0, 4).map((m, i) => (
                 <motion.div
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    className="flex items-center gap-2 mb-6"
+                    key={i}
+                    layout
+                    className="flex items-center gap-2 text-[10px] font-mono group"
                 >
-                    <div className="h-1 w-12 bg-white rounded-full" />
-                    <span className="text-xs font-bold uppercase tracking-[0.3em] text-[#52525b]">Market Intelligence</span>
+                    <span className="font-bold text-zinc-500 group-hover:text-blue-500 transition-colors uppercase tracking-widest">{m.s.split('/')[0]}</span>
+                    <span className="text-white tabular-nums">${m.p.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    <span className={cn("tabular-nums", m.c >= 0 ? "text-emerald-500" : "text-rose-500")}>
+                        {m.c > 0 ? "+" : ""}{m.c.toFixed(2)}%
+                    </span>
                 </motion.div>
-                <h1 className="text-title mb-6">Execution<br />Command.</h1>
-                <p className="text-description">Real-time performance monitoring across decentralized liquidity pools and autonomous trade agents.</p>
-            </header>
+            ))}
+        </div>
+    );
+};
 
-            {/* Premium CTA Cards Section */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.7 }}
-                >
-                    <Link href="/sidex">
-                        <div className="group relative overflow-hidden glass-card p-10 min-h-[320px] flex flex-col justify-between">
-                            <div className="absolute top-0 right-0 w-64 h-64 bg-accent-primary/10 blur-[100px] -translate-y-1/2 translate-x-1/2 group-hover:bg-accent-primary/20 transition-all duration-700" />
+export default function DashboardPage() {
+    const [currentTime, setCurrentTime] = useState<string>("");
+    const [command, setCommand] = useState("");
+    const { balance, metrics } = useDemoTrading();
+    const marketData = useLiveMarketData();
 
-                            <div>
-                                <div className="flex items-center gap-2 mb-6">
-                                    <span className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider bg-white/10 text-white rounded-full border border-white/10">Simulation</span>
-                                    <span className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider bg-emerald-500/10 text-emerald-400 rounded-full border border-emerald-500/10">Secure</span>
-                                </div>
-                                <h2 className="text-4xl font-bold text-white mb-4 tracking-[-0.03em]">Paper Trading</h2>
-                                <p className="text-[#a1a1aa] text-base leading-relaxed max-w-sm">
-                                    Execute high-frequency strategies with a $10,000 risk-free virtual balance. Zero latency execution.
-                                </p>
-                            </div>
+    useEffect(() => {
+        const timer = setInterval(() => {
+            const now = new Date();
+            setCurrentTime(now.toISOString().replace("T", " ").split(".")[0] + " :: UTC");
+        }, 1000);
+        return () => clearInterval(timer);
+    }, []);
 
-                            <div className="flex items-center gap-2 text-white font-bold text-sm group-hover:gap-4 transition-all duration-300">
-                                <span className="underline underline-offset-8 decoration-white/20 group-hover:decoration-white transition-all">Engage Terminal</span>
-                                <ArrowRight className="w-4 h-4" />
-                            </div>
-                        </div>
-                    </Link>
-                </motion.div>
-
-                <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.7, delay: 0.1 }}
-                >
-                    <Link href="/polymarket">
-                        <div className="group relative overflow-hidden glass-card p-10 min-h-[320px] flex flex-col justify-between">
-                            <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/10 blur-[100px] -translate-y-1/2 translate-x-1/2 group-hover:bg-emerald-500/20 transition-all duration-700" />
-
-                            <div>
-                                <div className="flex items-center gap-2 mb-6">
-                                    <span className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider bg-emerald-500/10 text-emerald-400 rounded-full border border-emerald-500/10">Live Web3</span>
-                                    <span className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider bg-white/10 text-white rounded-full border border-white/10">Prediction</span>
-                                </div>
-                                <h2 className="text-4xl font-bold text-white mb-4 tracking-[-0.03em]">Predictions</h2>
-                                <p className="text-[#a1a1aa] text-base leading-relaxed max-w-sm">
-                                    Participate in global outcomes. Politics, crypto markets, and cultural events with real-time settlement.
-                                </p>
-                            </div>
-
-                            <div className="flex items-center gap-2 text-white font-bold text-sm group-hover:gap-4 transition-all duration-300">
-                                <span className="underline underline-offset-8 decoration-white/20 group-hover:decoration-white transition-all">Launch Markets</span>
-                                <ArrowRight className="w-4 h-4" />
-                            </div>
-                        </div>
-                    </Link>
-                </motion.div>
-            </div>
-
-            {/* Metrics Row - Hero Section */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                {loading ? (
-                    [1, 2, 3, 4].map((i) => (
-                        <div key={i} className="h-[160px] glass-card animate-pulse shadow-sm" />
-                    ))
-                ) : (
-                    <>
-                        <MetricCard
-                            title="Total PnL"
-                            value={`$ ${(metrics?.totalPnL || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
-                            change={metrics?.pnlChange || 0}
-                            data={generateSparkline(metrics?.totalPnL || 0, true)}
-                            accentColor="green"
-                        />
-                        <MetricCard
-                            title="Total Volume"
-                            value={`$ ${(metrics?.totalVolume || 0).toLocaleString()}`}
-                            change={metrics?.volumeChange || 0}
-                            data={generateSparkline(metrics?.totalVolume || 0, true)}
-                            accentColor="blue"
-                        />
-                        <MetricCard
-                            title="Active Positions"
-                            value={String(metrics?.activePositions || 0)}
-                            change={2.4}
-                            data={generateSparkline(metrics?.activePositions || 0, true)}
-                            accentColor="purple"
-                        />
-                        <MetricCard
-                            title="Avg Latency"
-                            value={`${metrics?.avgExecutionTime || 42}ms`}
-                            change={-1.2}
-                            data={generateSparkline(metrics?.avgExecutionTime || 42, false)}
-                            accentColor="orange"
-                        />
-                    </>
-                )}
-            </div>
-
-            {/* Main Application Layout */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-
-                {/* Left Section: Signal Intelligence */}
-                <div className="lg:col-span-8 space-y-12">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
-                        <section className="h-[600px] glass-card p-1">
-                            <SignalFeed />
-                        </section>
-                        <section className="h-[600px] glass-card p-1">
-                            <WhaleAlerts />
-                        </section>
+    return (
+        <div className="flex-1 grid grid-cols-12 gap-4 h-full min-h-0 overflow-hidden pr-2 pb-2 font-mono">
+            {/* LEFT: DATA STREAM (3/12) */}
+            <div className="col-span-3 flex flex-col h-full bg-black/40 border-r border-white/5 overflow-hidden relative">
+                {/* Header */}
+                <div className="h-10 border-b border-white/5 flex items-center px-4 justify-between bg-white/[0.01]">
+                    <div className="flex items-center gap-2">
+                        <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                        <span className="text-[10px] font-bold text-emerald-500 tracking-widest uppercase">Net_Stream</span>
                     </div>
-
-                    {/* Pro Execution Intelligence */}
-                    <section className="glass-card p-10">
-                        <div className="flex items-center justify-between mb-10">
-                            <div className="flex items-center gap-4">
-                                <div className="h-12 w-12 rounded-2xl bg-white/[0.03] border border-white/[0.08] flex items-center justify-center">
-                                    <Cpu className="w-6 h-6 text-white" />
-                                </div>
-                                <div>
-                                    <h3 className="text-xl font-bold text-white tracking-tight">Active Agents</h3>
-                                    <p className="text-sm text-[#a1a1aa]">Neural processing units currently in the field.</p>
-                                </div>
-                            </div>
-                        </div>
-                        <AgentGrid />
-                    </section>
+                    <span className="text-[9px] text-zinc-600 font-mono italic opacity-50">RELAY_SYNCED</span>
                 </div>
 
-                {/* Right Section: Analytics & Reasoning */}
-                <aside className="lg:col-span-4 space-y-12 h-full">
-                    <AIReasoning />
+                {/* Stream Component */}
+                <div className="flex-1 min-h-0 overflow-hidden relative">
+                    <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-black/20 pointer-events-none z-10" />
+                    <PositionStream />
 
-                    <div className="glass-card p-10 group">
-                        <div className="flex items-center gap-3 mb-10">
-                            <div className="h-1.5 w-1.5 rounded-full bg-accent-primary shadow-[0_0_10px_var(--color-accent-primary)]" />
-                            <h3 className="text-[11px] font-bold text-white tracking-[0.2em] uppercase">Market Status</h3>
+                    {/* Scanline Effect */}
+                    <div className="absolute inset-0 pointer-events-none bg-[linear-gradient(rgba(18,18,18,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] z-[5] bg-[length:100%_2px,3px_100%] opacity-20" />
+                </div>
+
+                {/* Mini Stats Footer */}
+                <div className="h-24 border-t border-white/[0.05] bg-black/60 p-4 grid grid-cols-2 gap-4">
+                    <div className="flex flex-col justify-between">
+                        <span className="text-[9px] text-zinc-600 uppercase tracking-widest">Latency</span>
+                        <div className="text-xl text-white font-black">12<span className="text-[10px] text-zinc-500 font-normal ml-1">ms</span></div>
+                    </div>
+                    <div className="flex flex-col justify-between">
+                        <span className="text-[9px] text-zinc-600 uppercase tracking-widest">Uptime</span>
+                        <div className="text-xl text-emerald-500 font-black">99.99<span className="text-[10px] text-zinc-500 font-normal ml-1">%</span></div>
+                    </div>
+                </div>
+            </div>
+
+            {/* RIGHT: MAIN TERMINAL (9/12) */}
+            <div className="col-span-9 flex flex-col h-full min-h-0 relative">
+
+                {/* HEADER HUD */}
+                <div className="h-32 shrink-0 grid grid-cols-4 gap-4 mb-4">
+                    {/* Total Liquidity */}
+                    <div className="bg-black/40 border border-white/[0.05] p-5 relative overflow-hidden group">
+                        <div className="absolute top-0 right-0 p-4 opacity-50 group-hover:opacity-100 transition-opacity">
+                            <Activity className="w-5 h-5 text-zinc-700 group-hover:text-blue-500 transition-colors" />
                         </div>
-
-                        <div className="space-y-6">
-                            {[
-                                { label: "Execution Layer", value: "Online", status: "positive" },
-                                { label: "Sentiment Index", value: "Neutral", status: "neutral" },
-                                { label: "Volatility Rank", value: "Low", status: "neutral" },
-                                { label: "Arbitrage Health", value: "Active", status: "positive" }
-                            ].map((stat, i) => (
-                                <div key={i} className="flex justify-between items-center py-3 border-b border-white/[0.03] last:border-0 border-dashed">
-                                    <span className="text-sm font-medium text-[#a1a1aa]">{stat.label}</span>
-                                    <div className="flex items-center gap-2.5">
-                                        <div className={cn(
-                                            "w-1.5 h-1.5 rounded-full",
-                                            stat.status === "positive" ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]" : "bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.4)]"
-                                        )} />
-                                        <span className="text-sm font-bold text-white tracking-tight">{stat.value}</span>
-                                    </div>
+                        <div className="flex flex-col h-full justify-between relative z-10">
+                            <span className="text-[9px] font-black font-mono text-zinc-600 uppercase tracking-[0.2em] flex items-center gap-2">
+                                <TrendingUp className="w-3 h-3" /> Total_Liquidity
+                            </span>
+                            <div>
+                                <div className="text-2xl font-black text-white tracking-tighter tabular-nums">
+                                    ${balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                 </div>
-                            ))}
+                                <div className="text-[9px] text-zinc-500 mt-1 font-mono">
+                                    <span className="text-emerald-500">+2.4%</span> vs last epoch
+                                </div>
+                            </div>
                         </div>
                     </div>
-                </aside>
+
+                    {/* 24h Volume */}
+                    <div className="bg-black/40 border border-white/[0.05] p-5 relative overflow-hidden group">
+                        <div className="absolute top-0 right-0 p-4 opacity-50 group-hover:opacity-100 transition-opacity">
+                            <Globe className="w-5 h-5 text-zinc-700 group-hover:text-blue-500 transition-colors" />
+                        </div>
+                        <div className="flex flex-col h-full justify-between relative z-10">
+                            <span className="text-[9px] font-black font-mono text-zinc-600 uppercase tracking-[0.2em] flex items-center gap-2">
+                                <Globe className="w-3 h-3" /> 24h_Volume
+                            </span>
+                            <div>
+                                <div className="text-2xl font-black text-white tracking-tighter tabular-nums">
+                                    $14.2M
+                                </div>
+                                <div className="text-[9px] text-zinc-500 mt-1 font-mono">
+                                    Global aggregate
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Active Nodes */}
+                    <div className="bg-black/40 border border-white/[0.05] p-5 relative overflow-hidden group">
+                        <div className="absolute top-0 right-0 p-4 opacity-50 group-hover:opacity-100 transition-opacity">
+                            <Cpu className="w-5 h-5 text-zinc-700 group-hover:text-blue-500 transition-colors" />
+                        </div>
+                        <div className="flex flex-col h-full justify-between relative z-10">
+                            <span className="text-[9px] font-black font-mono text-zinc-600 uppercase tracking-[0.2em] flex items-center gap-2">
+                                <Cpu className="w-3 h-3" /> Active_Nodes
+                            </span>
+                            <div>
+                                <div className="text-2xl font-black text-emerald-500 tracking-tighter tabular-nums">
+                                    8/12
+                                </div>
+                                <div className="text-[9px] text-zinc-500 mt-1 font-mono">
+                                    <span className="text-blue-500">Optimized</span> for speed
+                                </div>
+                            </div>
+                        </div>
+                        {/* Progress Bar */}
+                        <div className="absolute bottom-0 left-0 w-full h-1 bg-white/[0.05]">
+                            <div className="h-full bg-blue-500 w-[66%]" />
+                        </div>
+                    </div>
+
+                    {/* Security Level */}
+                    <div className="bg-black/40 border border-white/[0.05] p-5 relative overflow-hidden group">
+                        <div className="absolute top-0 right-0 p-4 opacity-50 group-hover:opacity-100 transition-opacity">
+                            <Shield className="w-5 h-5 text-zinc-700 group-hover:text-blue-500 transition-colors" />
+                        </div>
+                        <div className="flex flex-col h-full justify-between relative z-10">
+                            <span className="text-[9px] font-black font-mono text-zinc-600 uppercase tracking-[0.2em] flex items-center gap-2">
+                                <Shield className="w-3 h-3" /> Security_Lvl
+                            </span>
+                            <div>
+                                <div className="text-2xl font-black text-blue-500 tracking-tighter tabular-nums text-shadow-glow">
+                                    MAXIMUM
+                                </div>
+                                <div className="text-[9px] text-zinc-500 mt-1 font-mono">
+                                    Encryption: AES-256
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* MAIN CONTENT AREA */}
+                <div className="flex-1 bg-black/40 border border-white/[0.05] relative overflow-hidden flex flex-col p-0">
+                    {/* Header */}
+                    <div className="h-10 border-b border-white/[0.05] bg-white/[0.01] flex items-center justify-between px-4">
+                        <div className="flex items-center gap-6">
+                            <div className="flex items-center gap-2 text-blue-500 px-2 py-0.5 rounded bg-blue-500/5 border border-blue-500/10">
+                                <Terminal className="w-3 h-3" />
+                                <span className="text-[9px] font-black tracking-widest uppercase italic">System_Console</span>
+                            </div>
+                            <MarketTicker data={marketData} />
+                        </div>
+                        <div className="text-[9px] font-mono text-zinc-600 tabular-nums">{currentTime}</div>
+                    </div>
+
+                    {/* Content */}
+                    <div className="flex-1 relative p-6 grid grid-cols-3 gap-6 overflow-hidden">
+                        {/* Background Grid */}
+                        <div className="absolute inset-0 pointer-events-none bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:32px_32px] opacity-20" />
+
+                        {/* Col 1: Market Depth (New Professional Table) */}
+                        <div className="col-span-3 flex flex-col gap-4 z-10">
+                            <div className="flex items-center justify-between">
+                                <h3 className="text-xs font-bold text-white uppercase tracking-widest flex items-center gap-2">
+                                    <Database className="w-3 h-3 text-blue-500" />
+                                    Active_Markets
+                                </h3>
+                                <div className="flex gap-2">
+                                    <button className="px-2 py-1 bg-blue-500/10 text-blue-500 text-[9px] font-bold rounded border border-blue-500/20">SPOT</button>
+                                    <button className="px-2 py-1 bg-white/5 text-zinc-500 text-[9px] font-bold rounded border border-white/5 hover:text-white">PERP</button>
+                                </div>
+                            </div>
+
+                            <div className="flex-1 border border-white/[0.05] bg-black/20 backdrop-blur-sm overflow-hidden flex flex-col">
+                                <div className="grid grid-cols-8 bg-white/[0.02] border-b border-white/[0.05] p-2 text-[9px] font-bold text-zinc-500 uppercase tracking-wider">
+                                    <div className="col-span-1 pl-2">Asset</div>
+                                    <div className="col-span-1 text-right">Price</div>
+                                    <div className="col-span-1 text-right">24h Change</div>
+                                    <div className="col-span-1 text-right">24h High</div>
+                                    <div className="col-span-1 text-right">24h Low</div>
+                                    <div className="col-span-1 text-right">24h Vol</div>
+                                    <div className="col-span-1 text-right">Mkt Cap</div>
+                                    <div className="col-span-1 text-right pr-2">Trend</div>
+                                </div>
+                                <div className="divide-y divide-white/[0.02]">
+                                    {marketData.map((row, i) => (
+                                        <motion.div
+                                            key={i}
+                                            layout
+                                            initial={{ opacity: 0 }}
+                                            animate={{ opacity: 1 }}
+                                            className="grid grid-cols-8 p-3 hover:bg-white/[0.02] transition-colors items-center text-[10px] font-mono group cursor-pointer border-l-2 border-l-transparent hover:border-l-blue-500/50"
+                                        >
+                                            <div className="col-span-1 pl-2 font-bold text-white group-hover:text-blue-400 transition-colors uppercase">{row.s}</div>
+                                            <motion.div
+                                                animate={{
+                                                    color: row.t === "up" ? ["#10b981", "#d1d5db"] : ["#f43f5e", "#d1d5db"],
+                                                    transition: { duration: 1 }
+                                                }}
+                                                className="col-span-1 text-right tabular-nums font-bold"
+                                            >
+                                                ${row.p.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                            </motion.div>
+                                            <div className={cn("col-span-1 text-right font-bold tabular-nums", row.c >= 0 ? "text-emerald-500" : "text-rose-500")}>
+                                                {row.c >= 0 ? "+" : ""}{row.c.toFixed(2)}%
+                                            </div>
+                                            <div className="col-span-1 text-right text-zinc-400 tabular-nums">
+                                                ${row.h.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                            </div>
+                                            <div className="col-span-1 text-right text-zinc-400 tabular-nums">
+                                                ${row.l.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                            </div>
+                                            <div className="col-span-1 text-right text-zinc-500 uppercase tracking-tighter">{row.v}</div>
+                                            <div className="col-span-1 text-right text-zinc-500 uppercase tracking-tighter">${row.m}</div>
+                                            <div className="col-span-1 text-right pr-2 flex justify-end">
+                                                {row.t === "up" ? (
+                                                    <div className="flex items-center text-emerald-500">
+                                                        <TrendingUp className="w-3 h-3" />
+                                                        <div className="w-1 h-1 rounded-full bg-emerald-500 absolute animate-ping ml-1" />
+                                                    </div>
+                                                ) : (
+                                                    <TrendingDown className="w-3 h-3 text-rose-500" />
+                                                )}
+                                            </div>
+                                        </motion.div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+
+
+                    </div>
+
+                    {/* Footer / Console Input */}
+                    <div className="h-10 border-t border-white/[0.05] bg-black/60 flex items-center px-4 gap-2">
+                        <span className="text-blue-500 font-bold text-xs">{">"}</span>
+                        <input
+                            type="text"
+                            value={command}
+                            onChange={(e) => setCommand(e.target.value)}
+                            placeholder="ENTER_COMMAND..."
+                            className="bg-transparent border-none outline-none text-[10px] font-mono text-white placeholder-zinc-700 flex-1 uppercase"
+                        />
+                        <div className="px-1.5 py-0.5 border border-white/10 rounded text-[8px] font-mono text-zinc-600">BASH_V4.2</div>
+                    </div>
+                </div>
             </div>
         </div>
     );

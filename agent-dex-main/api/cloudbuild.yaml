@@ -1,0 +1,48 @@
+# Cloud Build configuration for Agent DEX API service
+
+steps:
+  # Build the container image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', 'gcr.io/$PROJECT_ID/agent-dex:$COMMIT_SHA', '-t', 'gcr.io/$PROJECT_ID/agent-dex:latest', '.']
+
+  # Push the container image to Container Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/agent-dex:$COMMIT_SHA']
+
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/agent-dex:latest']
+
+  # Deploy to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'agent-dex'
+      - '--image'
+      - 'gcr.io/$PROJECT_ID/agent-dex:$COMMIT_SHA'
+      - '--region'
+      - '${_REGION}'
+      - '--port'
+      - '3001'
+      - '--allow-unauthenticated'
+      - '--min-instances'
+      - '0'
+      - '--max-instances'
+      - '5'
+      - '--memory'
+      - '256Mi'
+      - '--set-env-vars'
+      - 'NODE_ENV=production,PORT=3001'
+
+substitutions:
+  _REGION: us-central1
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+
+images:
+  - 'gcr.io/$PROJECT_ID/agent-dex:$COMMIT_SHA'
+  - 'gcr.io/$PROJECT_ID/agent-dex:latest'
+
+timeout: '1200s'

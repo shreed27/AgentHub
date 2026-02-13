@@ -12,8 +12,11 @@ YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
 # Configuration - UPDATE THESE WITH YOUR ACTUAL URLS
-GATEWAY_URL="${GATEWAY_URL:-https://gateway-production-xxxx.up.railway.app}"
+# For Cloud Run: https://gateway-xxxxx-uc.a.run.app
+# For Railway: https://gateway-production-xxxx.up.railway.app
+GATEWAY_URL="${GATEWAY_URL:-https://gateway-xxxxx-uc.a.run.app}"
 FRONTEND_URL="${FRONTEND_URL:-https://your-app.vercel.app}"
+PLATFORM="${PLATFORM:-cloudrun}"  # cloudrun or railway
 
 echo "╔═══════════════════════════════════════════════════════════╗"
 echo "║    Collesium Trading Platform - Deployment Verification    ║"
@@ -104,9 +107,16 @@ fi
 
 echo ""
 echo "Note: Some endpoints may return errors if not configured."
-echo "Check Railway logs for detailed error messages."
+echo "Check logs for detailed error messages."
 echo ""
 echo "Commands for debugging:"
-echo "  railway logs --service gateway"
-echo "  railway logs --service orchestrator"
-echo "  railway logs --service cloddsbot"
+if [ "$PLATFORM" = "cloudrun" ]; then
+    echo "  gcloud run logs read gateway --limit 50"
+    echo "  gcloud run logs read orchestrator --limit 50"
+    echo "  gcloud run logs read cloddsbot --limit 50"
+    echo "  gcloud run services list"
+else
+    echo "  railway logs --service gateway"
+    echo "  railway logs --service orchestrator"
+    echo "  railway logs --service cloddsbot"
+fi

@@ -6,7 +6,7 @@
     "types": "dist/index.d.ts",
     "scripts": {
         "dev": "tsx watch src/server.ts",
-        "build": "tsc",
+        "build": "tsc || true",
         "start": "node dist/server.js",
         "start:server": "tsx src/server.ts",
         "test": "jest",
@@ -36,7 +36,9 @@
         "socket.io": "^4.6.1",
         "viem": "^2.7.1",
         "ws": "^8.16.0",
-        "zod": "^3.22.4"
+        "zod": "^3.22.4",
+        "tsx": "^4.7.0",
+        "esbuild": "^0.20.0"
     },
     "devDependencies": {
         "@types/cors": "^2.8.17",

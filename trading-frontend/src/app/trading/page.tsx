@@ -57,14 +57,7 @@ export default function TradingPage() {
     return (
         <div className="space-y-6 animate-in fade-in duration-500">
             {/* Header */}
-            <div className="flex items-center justify-between">
-                <div>
-                    <h1 className="text-2xl font-bold">Trading</h1>
-                    <p className="text-muted-foreground">
-                        Execute trades, manage positions, and automate strategies
-                    </p>
-                </div>
-            </div>
+            {/* Header Removed */}
 
             {/* Tab Navigation */}
             <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">

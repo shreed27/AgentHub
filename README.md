@@ -1,10 +1,45 @@
-# DAIN - Decentralized Autonomous Intelligence Network
+# DAIN - Autonomous Trading OS
 
-> **The First Unified Platform for AI-Powered Trading Agents**
+> *One Brain. Every Market. Zero Wallet Popups.*
 
 [![Built for Colosseum](https://img.shields.io/badge/Built%20for-Solana%20Colosseum-blueviolet)](https://colosseum.org)
 [![Lines of Code](https://img.shields.io/badge/Lines%20of%20Code-80%2C000%2B-green)](.)
+[![npm](https://img.shields.io/badge/npm-@dain/agent--sdk-red)](./packages/agent-sdk)
 [![Real Tests](https://img.shields.io/badge/Tests-2%2C443%20lines-blue)](.)
+
+The operating system for autonomous trading agents. Trade Solana DEXs, prediction markets, and perpetual futures - without wallet popups or human babysitting.
+
+---
+
+## SDK Quick Start
+
+```bash
+npm install @dain/agent-sdk
+```
+
+```typescript
+import { DainClient } from '@dain/agent-sdk';
+
+const dain = new DainClient({ apiKey: process.env.DAIN_API_KEY });
+
+// Register your agent
+const agent = await dain.registerAgent({
+  name: 'my-trading-bot',
+  permissions: ['SWAP', 'LIMIT_ORDER']
+});
+
+// Execute a Solana swap via Jupiter
+const result = await dain.solana.swap({
+  inputMint: 'So11...112',  // SOL
+  outputMint: 'EPjF...1v',  // USDC
+  amount: 100000000,
+  slippage: 0.5
+});
+```
+
+**Integrations:** Eliza | solana-agent-kit | Claude MCP | LangChain
+
+[Full SDK Documentation](./docs/sdk/README.md)
 
 ---
 
@@ -276,6 +311,16 @@ npm test
 
 # Output: 2,443 lines of Jest tests passing
 ```
+
+---
+
+## Documentation
+
+- [SDK Documentation](./docs/sdk/README.md) - Full @dain/agent-sdk reference
+- [SDK Quick Start](./docs/sdk/QUICK_START.md) - Get trading in 5 minutes
+- [Hackathon Submission](./HACKATHON_SUBMISSION.md) - Complete submission document
+- [Project Status](./PROJECT_STATUS.md) - Development journal and roadmap
+- [CLAUDE.md](./CLAUDE.md) - Full technical reference
 
 ---
 

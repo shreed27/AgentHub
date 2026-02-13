@@ -357,8 +357,8 @@ export function createOrchestratorServer(port: number = 4000): {
             const market = intent.market || 'solana';
             const validation = orchestrator.validateAdaptersForOperation(
                 market === 'solana' ? 'solana_swap' :
-                market === 'futures' ? 'futures' :
-                market === 'prediction' ? 'prediction' : 'solana_swap'
+                    market === 'futures' ? 'futures' :
+                        market === 'prediction' ? 'prediction' : 'solana_swap'
             );
 
             res.json({
@@ -1018,17 +1018,17 @@ export function createOrchestratorServer(port: number = 4000): {
                     stateConfig: {
                         maxAllocation: currentState === 'growth' ? 100 :
                             currentState === 'normal' ? 80 :
-                            currentState === 'defensive' ? 50 :
-                            currentState === 'critical' ? 25 : 0,
+                                currentState === 'defensive' ? 50 :
+                                    currentState === 'critical' ? 25 : 0,
                         riskMultiplier: currentState === 'growth' ? 1.5 :
                             currentState === 'normal' ? 1.0 :
-                            currentState === 'defensive' ? 0.5 :
-                            currentState === 'critical' ? 0.25 : 0,
+                                currentState === 'defensive' ? 0.5 :
+                                    currentState === 'critical' ? 0.25 : 0,
                         description: status.mode === 'growth' ? 'Aggressive mode unlocked' :
                             status.mode === 'defensive' ? 'Positions reduced 50%' :
-                            status.mode === 'critical' ? 'Capital preservation mode' :
-                            status.mode === 'hibernation' ? 'All trading halted' :
-                            'Standard trading operations',
+                                status.mode === 'critical' ? 'Capital preservation mode' :
+                                    status.mode === 'hibernation' ? 'All trading halted' :
+                                        'Standard trading operations',
                     },
                     riskParams: {
                         maxPositionSize: status.mode === 'growth' ? 1000 : status.mode === 'defensive' ? 100 : 500,
@@ -4035,50 +4035,7 @@ export function createOrchestratorServer(port: number = 4000): {
         });
     });
 
-    // ==================== Pairing ====================
 
-    const pairingCodes: Map<string, any> = new Map();
-    const linkedAccounts: Map<string, any[]> = new Map();
-
-    /**
-     * POST /api/v1/pairing/code - Generate pairing code
-     */
-    app.post('/api/v1/pairing/code', async (req: Request, res: Response) => {
-        const code = Math.random().toString(36).substring(2, 10).toUpperCase();
-        pairingCodes.set(code, { code, status: 'pending', createdAt: Date.now(), expiresAt: Date.now() + 300000 });
-        res.json({ success: true, data: { code, expiresIn: '5 minutes', instructions: 'Enter this code in Telegram bot' } });
-    });
-
-    /**
-     * GET /api/v1/pairing/status/:code - Check pairing status
-     */
-    app.get('/api/v1/pairing/status/:code', async (req: Request, res: Response) => {
-        const pairing = pairingCodes.get(req.params.code);
-        if (!pairing) {
-            res.status(404).json({ success: false, error: 'Code not found or expired' });
-            return;
-        }
-        res.json({ success: true, data: pairing });
-    });
-
-    /**
-     * GET /api/v1/pairing/linked - Get linked accounts
-     */
-    app.get('/api/v1/pairing/linked', async (req: Request, res: Response) => {
-        const walletAddress = req.headers['x-wallet-address'] as string;
-        const accounts = linkedAccounts.get(walletAddress) || [];
-        res.json({ success: true, data: { walletAddress, linkedAccounts: accounts, count: accounts.length } });
-    });
-
-    /**
-     * DELETE /api/v1/pairing/linked/:channel/:userId - Unlink account
-     */
-    app.delete('/api/v1/pairing/linked/:channel/:userId', async (req: Request, res: Response) => {
-        const walletAddress = req.headers['x-wallet-address'] as string;
-        const accounts = linkedAccounts.get(walletAddress) || [];
-        linkedAccounts.set(walletAddress, accounts.filter(a => !(a.channel === req.params.channel && a.userId === req.params.userId)));
-        res.json({ success: true, data: { message: 'Account unlinked' } });
-    });
 
     // ==================== Trade Ledger ====================
 

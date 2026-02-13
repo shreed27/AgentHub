@@ -1,175 +1,205 @@
 @import "tailwindcss";
 
 @theme {
-    /* Premium High-End Palette */
-    --color-background: #030303;
-    --color-surface: #0a0a0a;
-    --color-surface-hover: #111111;
-    --color-surface-glass: rgba(10, 10, 10, 0.7);
+    /* Premium Professional Palette - Soft Dark Theme */
+    --color-background: #09090b;
+    /* Zinc 950 base */
+    --color-surface: #121215;
+    --color-surface-hover: #18181b;
+    --color-surface-active: #202023;
+    --color-surface-glass: rgba(18, 18, 21, 0.8);
 
-    --color-text-primary: #ffffff;
+    --color-border: rgba(255, 255, 255, 0.06);
+    --color-border-hover: rgba(255, 255, 255, 0.12);
+
+    --color-text-primary: #f4f4f5;
     --color-text-secondary: #a1a1aa;
     --color-text-tertiary: #52525b;
 
+    /* Refined Accents - Blue Theme */
     --color-accent-primary: #3b82f6;
-    --color-accent-primary-glow: rgba(59, 130, 246, 0.5);
+    /* Blue-500 base */
+    --color-accent-primary-dim: rgba(59, 130, 246, 0.1);
+    --color-accent-glow: rgba(59, 130, 246, 0.3);
 
+    /* Trading Colors - Keep standard market conventions or align with blue? 
+       User said "colors across platform is blue, black". 
+       I will keep positive as green for financial accuracy but maybe shift branding to blue. */
     --color-positive: #10b981;
+    --color-positive-dim: rgba(16, 185, 129, 0.05);
     --color-negative: #ef4444;
+    --color-negative-dim: rgba(239, 68, 68, 0.05);
     --color-warning: #f59e0b;
 
-    --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-    --font-sans: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-    --font-display: var(--font-outfit), sans-serif;
+    /* Typography */
+    --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    --font-sans: "Geist Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --font-display: "Outfit", sans-serif;
 
-    --border-radius-xl: 24px;
-    --border-radius-2xl: 32px;
+    /* Spacing & Layout */
+    --spacing-container: 1440px;
+    --sidebar-width: 280px;
+    --header-height: 72px;
 
-    --transition-premium: all 0.4s cubic-bezier(0.2, 0, 0, 1);
-    --transition-bounce: all 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+    /* Radius */
+    --radius-sm: 8px;
+    --radius-md: 14px;
+    --radius-lg: 20px;
+    --radius-full: 9999px;
+
+    /* Transitions */
+    --transition-fast: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    --transition-smooth: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 @layer base {
     :root {
-        --background: 0 0% 1%;
-        --foreground: 0 0% 100%;
-        --accent: 217 91% 60%;
+        color-scheme: dark;
+    }
+
+    html {
+        background-color: var(--color-background);
+        scroll-behavior: smooth;
     }
 
     body {
+        margin: 0;
+        padding: 0;
         background-color: var(--color-background);
         color: var(--color-text-primary);
         font-family: var(--font-sans);
         overflow-x: hidden;
         -webkit-font-smoothing: antialiased;
         -moz-osx-font-smoothing: grayscale;
-        letter-spacing: -0.01em;
+        letter-spacing: -0.015em;
     }
 
-    /* Refined Scrollbar */
+    /* Professional Scrollbar */
     ::-webkit-scrollbar {
         width: 4px;
         height: 4px;
     }
 
     ::-webkit-scrollbar-track {
-        background: transparent;
+        background: rgba(0, 0, 0, 0.2);
     }
 
     ::-webkit-scrollbar-thumb {
-        background: rgba(255, 255, 255, 0.05);
-        border-radius: 10px;
+        background: rgba(16, 185, 129, 0.3);
+        border-radius: 0;
     }
 
     ::-webkit-scrollbar-thumb:hover {
-        background: rgba(255, 255, 255, 0.1);
+        background: rgba(16, 185, 129, 0.6);
     }
 }
 
 @layer components {
 
-    /* Framer-Style Glassmorphism */
-    .glass-card {
-        @apply relative bg-[#090909] border border-white/[0.06] overflow-hidden transition-all duration-500;
-        border-radius: var(--border-radius-xl);
-        box-shadow: 0 4px 24px -1px rgba(0, 0, 0, 0.2);
+    /* Layout Primitives */
+    .container-wide {
+        width: 100%;
+        max-width: var(--spacing-container);
+        margin: 0 auto;
+        padding: 0 24px;
     }
 
-    .glass-card:hover {
-        @apply border-white/[0.12] bg-[#0c0c0c];
-        box-shadow: 0 12px 40px -4px rgba(0, 0, 0, 0.4);
-        transform: translateY(-4px);
+    /* Glass Effect */
+    .glass-panel {
+        @apply relative backdrop-blur-xl border border-[var(--color-border)] bg-[var(--color-surface-glass)] transition-all duration-300;
+        box-shadow: 0 4px 30px rgba(0, 0, 0, 0.4);
     }
 
-    .glass-card::before {
-        content: "";
+    .glass-panel:hover {
+        @apply border-[var(--color-border-hover)];
+        box-shadow: 0 8px 40px rgba(0, 0, 0, 0.6);
+    }
+
+    /* Card Glow */
+    .glow-hover {
+        position: relative;
+        overflow: hidden;
+    }
+
+    .glow-hover::after {
+        content: '';
         position: absolute;
-        inset: 0;
-        background: linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0%, transparent 100%);
-        pointer-events: none;
-    }
-
-    .glass-sidebar {
-        @apply bg-[#050505] border-r border-white/[0.05] backdrop-blur-3xl;
-    }
-
-    /* Premium Buttons */
-    .btn-premium {
-        @apply relative inline-flex items-center justify-center font-bold px-6 py-3 rounded-full transition-all duration-300 overflow-hidden active:scale-95;
-        background: var(--color-text-primary);
-        color: var(--color-background);
-        font-size: 14px;
-        letter-spacing: -0.02em;
-    }
-
-    .btn-premium:hover {
-        box-shadow: 0 0 20px rgba(255, 255, 255, 0.15);
-        opacity: 0.95;
-    }
-
-    .btn-premium-ghost {
-        @apply relative inline-flex items-center justify-center font-bold px-6 py-3 rounded-full transition-all duration-300 border border-white/[0.1] bg-white/[0.02] text-white hover:bg-white/[0.05] hover:border-white/[0.2] active:scale-95;
-        font-size: 14px;
-    }
-
-    /* Typography */
-    .text-title {
-        @apply text-5xl md:text-7xl font-bold tracking-[-0.04em] leading-[0.9] text-white;
-    }
-
-    .text-description {
-        @apply text-lg md:text-xl text-[#a1a1aa] font-medium leading-relaxed;
-    }
-
-    /* Animations */
-    .shimmer {
-        background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.03), transparent);
-        background-size: 200% 100%;
-        animation: shimmer 2s infinite;
-    }
-
-    @keyframes shimmer {
-        0% {
-            background-position: -200% 0;
-        }
-
-        100% {
-            background-position: 200% 0;
-        }
-    }
-
-    .glow-bg {
-        background: radial-gradient(circle at center, var(--color-accent-primary-glow) 0%, transparent 70%);
-    }
-}
-
-.fade-up {
-    animation: fadeUp 0.8s cubic-bezier(0.2, 0, 0, 1) forwards;
-}
-
-@keyframes fadeUp {
-    from {
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: radial-gradient(800px circle at var(--mouse-x) var(--mouse-y), rgba(255, 255, 255, 0.04), transparent 40%);
         opacity: 0;
-        transform: translateY(30px);
+        transition: opacity 0.5s;
+        pointer-events: none;
+        z-index: 1;
+    }
+
+    .glow-hover:hover::after {
+        opacity: 1;
+    }
+
+    /* Text Gradients */
+    .text-gradient {
+        @apply bg-clip-text text-transparent bg-gradient-to-r from-white via-white to-white/50;
+    }
+
+    .text-gradient-accent {
+        @apply bg-clip-text text-transparent bg-gradient-to-r from-[var(--color-accent-primary)] to-cyan-400;
+    }
+}
+
+/* Utilities */
+.no-scrollbar::-webkit-scrollbar {
+    display: none;
+}
+
+.no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+
+/* Animations - Explicitly Global */
+@keyframes spin-slow {
+    from {
+        transform: rotate(0deg);
     }
 
     to {
+        transform: rotate(360deg);
+    }
+}
+
+@keyframes reverse-spin {
+    from {
+        transform: rotate(360deg);
+    }
+
+    to {
+        transform: rotate(0deg);
+    }
+}
+
+@keyframes fade-in-up {
+    0% {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    100% {
         opacity: 1;
         transform: translateY(0);
     }
 }
 
-/* Background Effects */
-.noise-overlay {
-    position: fixed;
-    inset: 0;
-    z-index: 100;
-    pointer-events: none;
-    opacity: 0.015;
-    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+.animate-spin-slow {
+    animation: spin-slow 20s linear infinite;
 }
 
-.dot-pattern {
-    background-image: radial-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px);
-    background-size: 24px 24px;
+.animate-reverse-spin {
+    animation: reverse-spin 15s linear infinite;
+}
+
+.animate-fade-in {
+    animation: fade-in-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }

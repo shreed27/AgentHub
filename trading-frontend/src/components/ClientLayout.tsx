@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { RainbowKitProvider, darkTheme } from "@rainbow-me/rainbowkit";
 import { config } from "../config/wagmi";
 import { DashboardShell } from "@/components/layout/DashboardShell";
+import { DemoTradingProvider } from "@/components/providers/DemoTradingProvider";
 
 import "@rainbow-me/rainbowkit/styles.css";
 
@@ -24,11 +25,13 @@ export function ClientLayout({ children }: ClientLayoutProps) {
   // Show a loading shell during SSR/hydration to prevent wallet provider SSR issues
   if (!mounted) {
     return (
-      <DashboardShell>
-        <div className="flex items-center justify-center h-screen">
-          <div className="animate-spin w-8 h-8 border-2 border-white/20 border-t-white rounded-full" />
-        </div>
-      </DashboardShell>
+      <DemoTradingProvider>
+        <DashboardShell>
+          <div className="flex items-center justify-center h-screen">
+            <div className="animate-spin w-8 h-8 border-2 border-white/20 border-t-white rounded-full" />
+          </div>
+        </DashboardShell>
+      </DemoTradingProvider>
     );
   }
 
@@ -47,9 +50,11 @@ export function ClientLayout({ children }: ClientLayoutProps) {
           <div className="scanlines" />
           <div className="bg-noise" />
 
-          <DashboardShell>
-            {children}
-          </DashboardShell>
+          <DemoTradingProvider>
+            <DashboardShell>
+              {children}
+            </DashboardShell>
+          </DemoTradingProvider>
         </RainbowKitProvider>
       </QueryClientProvider>
     </WagmiProvider>

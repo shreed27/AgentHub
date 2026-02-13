@@ -17,7 +17,7 @@ interface DemoAgent {
 const demoAgents: DemoAgent[] = [
   {
     name: 'Alpha-1',
-    type: 'Market Maker',
+    type: 'trading',
     status: 'active',
     performance: {
       totalTrades: 127,
@@ -30,7 +30,7 @@ const demoAgents: DemoAgent[] = [
   },
   {
     name: 'Gamma-Ray',
-    type: 'Arbitrage',
+    type: 'trading',
     status: 'active',
     performance: {
       totalTrades: 89,
@@ -43,7 +43,7 @@ const demoAgents: DemoAgent[] = [
   },
   {
     name: 'Delta-V',
-    type: 'Momentum',
+    type: 'trading',
     status: 'paused',
     performance: {
       totalTrades: 56,
@@ -80,7 +80,7 @@ export function seedDemoAgents(): void {
     maxPositionSize: 1000,
     maxDailyLoss: 100,
     maxOpenPositions: 5,
-    allowedMarkets: ['dex', 'prediction'],
+    allowedMarkets: ['dex', 'prediction_market'],
     allowedChains: ['solana'],
     riskLevel: 'moderate',
     autoExecute: true,
@@ -131,8 +131,8 @@ export function seedDemoPositions(): void {
   console.log('[Seed] Seeding demo positions...');
 
   const insertStmt = db.prepare(`
-    INSERT INTO positions (id, agent_id, token_address, token_symbol, side, entry_price, current_price, amount, value, pnl, pnl_percent, status, chain, opened_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO positions (id, agent_id, token, token_symbol, chain, side, amount, entry_price, current_price, unrealized_pnl, unrealized_pnl_percent, opened_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   const now = Date.now();
@@ -170,7 +170,6 @@ export function seedDemoPositions(): void {
 
   for (const pos of demoPositions) {
     const id = uuidv4();
-    const value = pos.currentPrice * pos.amount;
     const pnl = (pos.currentPrice - pos.entryPrice) * pos.amount;
     const pnlPercent = ((pos.currentPrice - pos.entryPrice) / pos.entryPrice) * 100;
 
@@ -179,15 +178,13 @@ export function seedDemoPositions(): void {
       agentId,
       pos.tokenAddress,
       pos.tokenSymbol,
+      'solana',
       pos.side,
+      pos.amount,
       pos.entryPrice,
       pos.currentPrice,
-      pos.amount,
-      value,
       pnl,
       pnlPercent,
-      'open',
-      'solana',
       now - 3600000, // Opened 1 hour ago
       now
     );

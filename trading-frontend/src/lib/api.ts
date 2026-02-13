@@ -2084,66 +2084,20 @@ class ApiClient {
 
   // ==================== Polymarket Markets ====================
 
-  async getPolymarketMarkets(params?: { active?: boolean; limit?: number }) {
-    const queryParams = new URLSearchParams();
-    if (params) {
-      if (params.active !== undefined) queryParams.set('active', String(params.active));
-      if (params.limit !== undefined) queryParams.set('limit', String(params.limit));
-    }
-    const queryString = queryParams.toString();
-    return this.request<Array<{
-      id: string;
-      question: string;
-      slug: string;
-      outcomes: Array<{
-        tokenId: string;
-        name: string;
-        price: number;
-      }>;
-      volume24h: number;
-      totalVolume: number;
-      liquidity: number;
-      endDate: string;
-      active: boolean;
-    }>>('GET', `/api/v1/sidex/polymarket/markets${queryString ? '?' + queryString : ''}`);
-  }
+  /* 
+   * Polymarket Search & User Trades
+   * Note: Main market fetching is handled by direct Gamma API methods below
+   */
 
   async searchPolymarketMarkets(query: string, limit?: number) {
+    // efficient search could be implemented here against Gamma API if needed
+    // for now we warn it's not fully linked
+    console.warn("searchPolymarketMarkets via proxy not fully verified");
     const params = new URLSearchParams({ q: query });
     if (limit) params.set('limit', String(limit));
-    return this.request<Array<{
-      id: string;
-      question: string;
-      slug: string;
-      outcomes: Array<{
-        tokenId: string;
-        name: string;
-        price: number;
-      }>;
-      volume24h: number;
-      totalVolume: number;
-      liquidity: number;
-      endDate: string;
-      active: boolean;
-    }>>('GET', `/api/v1/sidex/polymarket/markets/search?${params}`);
-  }
-
-  async getPolymarketMarket(marketId: string) {
-    return this.request<{
-      id: string;
-      question: string;
-      slug: string;
-      outcomes: Array<{
-        tokenId: string;
-        name: string;
-        price: number;
-      }>;
-      volume24h: number;
-      totalVolume: number;
-      liquidity: number;
-      endDate: string;
-      active: boolean;
-    }>('GET', `/api/v1/sidex/polymarket/markets/${marketId}`);
+    // Implementation placeholder or keep old proxy if it might work for simple text search
+    // return this.request<Array<any>>('GET', `/api/v1/sidex/polymarket/markets/search?${params}`);
+    return { success: false, error: "Not implemented active search" } as any;
   }
 
   async getPolymarketUserTrades(wallet: string, limit?: number) {
@@ -2437,6 +2391,58 @@ class ApiClient {
         winRate: number;
       };
     }>>('GET', '/api/v1/sidex/copy-configs/crypto');
+  }
+
+  // ==================== POLYMARKET API METHODS (DIRECT) ====================
+
+  async getPolymarketMarkets(params?: {
+    limit?: number;
+    offset?: number;
+    active?: boolean;
+    closed?: boolean;
+    order?: string;
+    ascending?: boolean;
+    slug?: string;
+  }): Promise<ApiResponse<Array<any>>> {
+    try {
+      const queryParams = new URLSearchParams();
+      if (params?.limit) queryParams.append("limit", params.limit.toString());
+      if (params?.offset) queryParams.append("offset", params.offset.toString());
+      if (params?.active) queryParams.append("active", "true");
+      if (params?.closed) queryParams.append("closed", "true");
+      if (params?.order) queryParams.append("order", params.order);
+      if (params?.ascending) queryParams.append("ascending", params.ascending.toString());
+      if (params?.slug) queryParams.append("slug", params.slug);
+
+      const response = await fetch(`https://gamma-api.polymarket.com/markets?${queryParams.toString()}`);
+
+      if (!response.ok) {
+        throw new Error(`Polymarket API error: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      return { success: true, data };
+    } catch (error) {
+      console.error("Polymarket API fetch failed:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error"
+      };
+    }
+  }
+
+  async getPolymarketMarket(id: string): Promise<ApiResponse<any>> {
+    try {
+      const response = await fetch(`https://gamma-api.polymarket.com/markets/${id}`);
+      if (!response.ok) throw new Error("Market not found");
+      const data = await response.json();
+      return { success: true, data };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error"
+      };
+    }
   }
 }
 

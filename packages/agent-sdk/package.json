@@ -1,0 +1,77 @@
+{
+  "name": "@dain/agent-sdk",
+  "version": "0.1.0",
+  "description": "SDK for autonomous trading agents - trade Solana DEXs, prediction markets, and perpetual futures without wallet popups",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./solana": {
+      "import": "./dist/solana/index.mjs",
+      "require": "./dist/solana/index.js",
+      "types": "./dist/solana/index.d.ts"
+    },
+    "./prediction": {
+      "import": "./dist/prediction/index.mjs",
+      "require": "./dist/prediction/index.js",
+      "types": "./dist/prediction/index.d.ts"
+    },
+    "./futures": {
+      "import": "./dist/futures/index.mjs",
+      "require": "./dist/futures/index.js",
+      "types": "./dist/futures/index.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts src/solana/index.ts src/prediction/index.ts src/futures/index.ts --format cjs,esm --dts",
+    "dev": "tsup src/index.ts --watch",
+    "test": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "dain",
+    "trading",
+    "ai-agents",
+    "solana",
+    "defi",
+    "jupiter",
+    "polymarket",
+    "prediction-markets",
+    "autonomous-trading"
+  ],
+  "author": "DAIN Team",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dain-protocol/agent-sdk"
+  },
+  "homepage": "https://dain.dev",
+  "bugs": {
+    "url": "https://github.com/dain-protocol/agent-sdk/issues"
+  },
+  "dependencies": {
+    "@solana/web3.js": "^1.95.0",
+    "viem": "^2.21.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.3.0",
+    "vitest": "^1.0.0"
+  },
+  "peerDependencies": {
+    "@solana/web3.js": ">=1.90.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

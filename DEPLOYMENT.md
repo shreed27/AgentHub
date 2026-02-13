@@ -1,5 +1,19 @@
 # Collesium Trading Platform - Deployment Guide
 
+Deploy the full stack using **Vercel** (frontend) + your choice of backend platform.
+
+## Deployment Options
+
+| Platform | Best For | Documentation |
+|----------|----------|---------------|
+| **Railway** | Quick setup, integrated experience | This document |
+| **Google Cloud Run** | Production scale, better pricing | [DEPLOYMENT-CLOUDRUN.md](./DEPLOYMENT-CLOUDRUN.md) |
+| **Docker Compose** | Local development, self-hosted | See `docker-compose.yml` |
+
+---
+
+## Railway Deployment
+
 Deploy the full stack using **Vercel** (frontend) + **Railway** (backends).
 
 ## Architecture

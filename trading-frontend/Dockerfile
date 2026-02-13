@@ -1,23 +1,33 @@
-FROM node:20-alpine AS deps
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci
+# Base image
+FROM node:20-slim AS base
+ENV NEXT_TELEMETRY_DISABLED=1
 
-FROM node:20-alpine AS builder
+# Deps stage
+FROM base AS deps
+WORKDIR /app
+
+# Install build tools for native modules (python3, make, g++)
+RUN apt-get update && apt-get install -y python3 make g++ && rm -rf /var/lib/apt/lists/*
+
+COPY package.json ./
+RUN npm install
+
+# Builder stage
+FROM base AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-ENV NEXT_TELEMETRY_DISABLED=1
+
 ENV NODE_ENV=production
 RUN npm run build
 
-FROM node:20-alpine AS runner
+# Runner stage
+FROM base AS runner
 WORKDIR /app
 ENV NODE_ENV=production
-ENV NEXT_TELEMETRY_DISABLED=1
 
-RUN addgroup --system --gid 1001 nodejs && \
-    adduser --system --uid 1001 nextjs
+RUN addgroup --system --gid 1001 nodejs
+RUN adduser --system --uid 1001 nextjs
 
 COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./

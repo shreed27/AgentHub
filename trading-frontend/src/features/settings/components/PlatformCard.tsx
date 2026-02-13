@@ -1,7 +1,7 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { motion } from 'framer-motion';
+import { useState } from "react";
+import { motion } from "framer-motion";
 import {
   MessageCircle,
   Hash,
@@ -19,9 +19,11 @@ import {
   Unplug,
   Zap,
   Link,
-} from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { Platform, IntegrationStatus, LinkedAccount } from '../types';
+  Target,
+  ChevronRight
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import { Platform, IntegrationStatus, LinkedAccount } from "../types";
 
 interface PlatformCardProps {
   platform: Platform;
@@ -41,16 +43,16 @@ const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   mail: Mail,
   email: Mail,
   chart: BarChart3,
-  'trending-up': TrendingUp,
+  "trending-up": TrendingUp,
   bitcoin: Bitcoin,
   coins: Coins,
   link: Link,
 };
 
 const statusConfig: Record<IntegrationStatus, { icon: React.ComponentType<{ className?: string }>; color: string; label: string }> = {
-  connected: { icon: CheckCircle2, color: 'text-green-500', label: 'Connected' },
-  disconnected: { icon: XCircle, color: 'text-muted-foreground', label: 'Not Connected' },
-  error: { icon: AlertCircle, color: 'text-destructive', label: 'Error' },
+  connected: { icon: CheckCircle2, color: "text-emerald-500", label: "ACTIVE_NODE" },
+  disconnected: { icon: XCircle, color: "text-zinc-600", label: "OFFLINE" },
+  error: { icon: AlertCircle, color: "text-rose-500", label: "LINK_ERROR" },
 };
 
 export function PlatformCard({
@@ -63,86 +65,85 @@ export function PlatformCard({
   isTesting,
   linkedAccount,
 }: PlatformCardProps) {
-  const [showActions, setShowActions] = useState(false);
   const Icon = iconMap[platform.icon] || Link;
   const statusInfo = statusConfig[platform.status];
   const StatusIcon = statusInfo.icon;
+  const isConnected = platform.connected;
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
+      layout
       className={cn(
-        'relative group rounded-xl border bg-card/50 backdrop-blur-sm p-4 transition-all duration-300',
-        platform.connected
-          ? 'border-green-500/30 hover:border-green-500/50'
-          : 'border-border/50 hover:border-border'
+        "group relative overflow-hidden p-6 rounded-[32px] border transition-all duration-500 bg-surface/30 backdrop-blur-md",
+        isConnected
+          ? "border-blue-500/20 shadow-[0_0_30px_rgba(59,130,246,0.05)]"
+          : "border-white/[0.04] hover:border-white/[0.1] shadow-lg"
       )}
-      onMouseEnter={() => setShowActions(true)}
-      onMouseLeave={() => setShowActions(false)}
     >
-      {/* Status indicator */}
-      <div className="absolute top-3 right-3">
-        <div className={cn('flex items-center gap-1.5 text-xs font-medium', statusInfo.color)}>
-          <StatusIcon className="w-3.5 h-3.5" />
-          <span className="hidden sm:inline">{statusInfo.label}</span>
+      {/* Background decoration */}
+      <div className={cn(
+        "absolute top-0 right-0 w-24 h-24 rounded-full blur-3xl -mr-12 -mt-12 opacity-10 transition-all duration-700",
+        isConnected ? "bg-blue-500 opacity-20" : "bg-white opacity-5 group-hover:opacity-10"
+      )} />
+
+      {/* Header Info */}
+      <div className="flex justify-between items-start mb-6">
+        <div className="flex items-center gap-4">
+          <div className={cn(
+            "w-12 h-12 rounded-2xl flex items-center justify-center border transition-all duration-500",
+            isConnected
+              ? "bg-blue-500/10 border-blue-500/20 text-blue-500"
+              : "bg-black/40 border-white/5 text-zinc-500 group-hover:border-white/10 group-hover:text-zinc-300"
+          )}>
+            <Icon className="w-5 h-5" />
+          </div>
+          <div className="flex flex-col">
+            <h3 className="text-sm font-black text-white uppercase tracking-widest font-mono group-hover:text-blue-400 transition-colors">
+              {platform.name}
+            </h3>
+            <div className="flex items-center gap-2 mt-0.5">
+              <span className={cn(
+                "text-[8px] font-black uppercase tracking-[0.2em] px-2 py-0.5 rounded-lg border",
+                platform.category === 'messaging' && 'bg-blue-500/5 border-blue-500/10 text-blue-500/60',
+                platform.category === 'exchange' && 'bg-orange-500/5 border-orange-500/10 text-orange-500/60',
+                platform.category === 'prediction' && 'bg-purple-500/5 border-purple-500/10 text-purple-500/60'
+              )}>
+                {platform.category}
+              </span>
+              {linkedAccount && (
+                <span className="text-[9px] font-bold text-zinc-600 uppercase tracking-widest truncate max-w-[100px]">
+                  @{linkedAccount.username || linkedAccount.userId}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className={cn("flex items-center gap-1.5 text-[9px] font-black font-mono tracking-widest", statusInfo.color)}>
+          <div className={cn("w-1 h-1 rounded-full", isConnected ? "bg-emerald-500 animate-pulse" : "bg-current")} />
+          {statusInfo.label}
         </div>
       </div>
 
-      {/* Platform info */}
-      <div className="flex items-start gap-3 mb-3">
-        <div
-          className={cn(
-            'w-10 h-10 rounded-lg flex items-center justify-center transition-colors',
-            platform.connected
-              ? 'bg-green-500/10 text-green-500'
-              : 'bg-muted/50 text-muted-foreground'
-          )}
-        >
-          <Icon className="w-5 h-5" />
-        </div>
-        <div className="flex-1 min-w-0 pr-16">
-          <h3 className="font-semibold text-foreground truncate">{platform.name}</h3>
-          <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
-            {platform.description}
-          </p>
-        </div>
-      </div>
+      <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mb-8 leading-relaxed min-h-[32px] line-clamp-2">
+        {platform.description}
+      </p>
 
-      {/* Category badge + linked account */}
-      <div className="mb-3 flex items-center gap-2">
-        <span
-          className={cn(
-            'inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium uppercase tracking-wider',
-            platform.category === 'messaging' && 'bg-blue-500/10 text-blue-500',
-            platform.category === 'exchange' && 'bg-orange-500/10 text-orange-500',
-            platform.category === 'prediction' && 'bg-purple-500/10 text-purple-500'
-          )}
-        >
-          {platform.category}
-        </span>
-        {linkedAccount && (
-          <span className="text-xs text-muted-foreground truncate">
-            @{linkedAccount.username || linkedAccount.userId}
-          </span>
-        )}
-      </div>
-
-      {/* Actions */}
-      <div className="flex items-center gap-2">
-        {platform.connected ? (
+      {/* Footer Actions */}
+      <div className="flex items-center gap-2 pt-6 border-t border-white/[0.04] group-hover:border-white/[0.08] transition-colors">
+        {isConnected ? (
           <>
             <button
               onClick={onConfigure}
-              className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-accent/50 hover:bg-accent text-sm font-medium transition-colors"
+              className="flex-1 h-11 flex items-center justify-center gap-2 rounded-xl bg-white/[0.03] border border-white/[0.05] text-[9px] font-black uppercase tracking-widest text-zinc-400 hover:bg-white/[0.08] hover:text-white transition-all"
             >
               <Settings className="w-3.5 h-3.5" />
-              Configure
+              CONFIG
             </button>
             <button
               onClick={onTest}
               disabled={isTesting}
-              className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-accent/50 hover:bg-accent text-sm font-medium transition-colors disabled:opacity-50"
+              className="w-11 h-11 flex items-center justify-center rounded-xl bg-white/[0.03] border border-white/[0.05] text-zinc-500 hover:text-blue-500 hover:bg-blue-500/10 hover:border-blue-500/20 transition-all disabled:opacity-50"
             >
               {isTesting ? (
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -152,7 +153,7 @@ export function PlatformCard({
             </button>
             <button
               onClick={onDisconnect}
-              className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg hover:bg-destructive/10 hover:text-destructive text-muted-foreground text-sm font-medium transition-colors"
+              className="w-11 h-11 flex items-center justify-center rounded-xl hover:bg-rose-500/10 hover:text-rose-500 text-zinc-600 transition-all border border-transparent hover:border-rose-500/20"
             >
               <Unplug className="w-3.5 h-3.5" />
             </button>
@@ -161,17 +162,17 @@ export function PlatformCard({
           <button
             onClick={onConnect}
             disabled={isConnecting}
-            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary text-sm font-medium transition-colors disabled:opacity-50"
+            className="w-full h-11 flex items-center justify-center gap-2 rounded-xl bg-blue-500 text-black text-[10px] font-black uppercase tracking-[0.2em] hover:bg-blue-600 transition-all disabled:opacity-50"
           >
             {isConnecting ? (
               <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Connecting...
+                <Loader2 className="w-4 h-4 animate-spin text-black" />
+                INITIATING...
               </>
             ) : (
               <>
-                <Link className="w-4 h-4" />
-                Connect
+                <Link className="w-4 h-4 text-black" />
+                LINK_NODE
               </>
             )}
           </button>

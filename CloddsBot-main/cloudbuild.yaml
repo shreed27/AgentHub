@@ -1,0 +1,50 @@
+# Cloud Build configuration for CloddsBot service
+
+steps:
+  # Build the container image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', 'gcr.io/$PROJECT_ID/cloddsbot:$COMMIT_SHA', '-t', 'gcr.io/$PROJECT_ID/cloddsbot:latest', '.']
+
+  # Push the container image to Container Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/cloddsbot:$COMMIT_SHA']
+
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/cloddsbot:latest']
+
+  # Deploy to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'cloddsbot'
+      - '--image'
+      - 'gcr.io/$PROJECT_ID/cloddsbot:$COMMIT_SHA'
+      - '--region'
+      - '${_REGION}'
+      - '--port'
+      - '18789'
+      - '--allow-unauthenticated'
+      - '--min-instances'
+      - '0'
+      - '--max-instances'
+      - '3'
+      - '--memory'
+      - '1Gi'
+      - '--cpu'
+      - '1'
+      - '--set-env-vars'
+      - 'NODE_ENV=production,PORT=18789'
+
+substitutions:
+  _REGION: us-central1
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+
+images:
+  - 'gcr.io/$PROJECT_ID/cloddsbot:$COMMIT_SHA'
+  - 'gcr.io/$PROJECT_ID/cloddsbot:latest'
+
+timeout: '1200s'
